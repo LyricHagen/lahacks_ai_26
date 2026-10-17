@@ -1,0 +1,22 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: who2ask-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: who2ask
+      POSTGRES_PASSWORD: who2ask
+      POSTGRES_DB: who2ask
+    ports:
+      - "5433:5432"
+    volumes:
+      - who2ask-pg:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U who2ask -d who2ask"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  who2ask-pg:

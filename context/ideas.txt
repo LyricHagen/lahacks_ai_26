@@ -1,0 +1,31 @@
+Below are some haphazard notes from past hackathons. Just please:
+TAKE ALL OF THIS WITH A GRAIN OF SALT. Most of these ideas SUCK and are not viable for the hackathon (especially anything involving hardware, I'm not doing that.) I just figured I'd put the ideas here anyway. It's just old ideas and most of these are NOT viable so you can ignore the ones that don't land i.e. most of them. Even not all the considerations are good. Trust your own judgement over ANYTHING here.
+
+
+
+Hackathon ideas:
+1. Find an OPTIMAL home/apartment. Need the lowest price humanly possible? And need good QoL? We’ve got you covered.
+2. Agentic farming. This machine will spray your plants/crops with water and minerals exactly when they need them.
+3. Agentic work simulator. Can’t find a job? No problem. We’ll give you work and it’ll fit under the definition of working a job.
+4. Helps people with x disability do y
+5. Agents are terrible at finding YouTube videos to help you study for your test. This one isn’t.
+6. Something like sticky jams - solving a very easy-to-understand problem that everyone has
+7. App that finds optimal community college classes for you so you can cut corners in your degree (people love doing this)
+8. App that decides your meals for you (people hate thinking of what to eat and cooking)
+9. People love leaderboards. Implement leaderboards (assuming a good userbase); that one NYC walking app did this
+10. Something using GPT6’s Blender capabilities
+12. Gen Z parents from the Bay are obsessed with making their kids as cracked as possible. Some kind of startup that educates kids from zero to grad level as fast as possible in some optimal AI-backed way would do really well no matter how actually good it is. I have overheard some crazy things about CS majors “optimizing their kids” when they raise them and teaching them calculus when they’re like 7
+13. Duolingo for learning FL Studio
+14. Company that helps people with AI sovereignty - this is gonna be a growing thing in the 2030s
+
+Considerations:
+1. The demo must get the judges involved or feel personal to the judges. Examples: They try on a VR headset, or they see their own judging software get pentested, stuff like that
+2. The presentation matters a lot. An entertaining presentation/video really matters and it can’t alienate the judges or make them feel like they don’t understand
+3. Do all the backend on one person’s device, from the start. The other person can just prompt engineer and do UI/UX/design/naming and the demo. Have half of the team work on the demo from the start.
+4. Get continuous feedback from sponsors. In fact, email some of them before the hackathon even starts, although not necessary
+5. Make sure the project hits as many sponsor tracks as possible
+6. A child should be able to understand the app in 10 seconds
+7. Context engineer, 3-5 agents, - you’re competing with people who are doing this, although to be fair it’s 90% the idea. Guides: https://x.com/affaan/status/2014040193557471352, https://github.com/affaan-m/ECC 
+
+Product names (most of these suck they’re just leftover ideas from past hackathons): Altostratus, Sunstone, SolarDial, Kavara, Avalon, Ferndale, Tehama, Azusa, Ridgecrest, PresentRCQ, Talona, Trevik, Del Norte, Maradi, Tillaberry, Humboldt, Ayzel, DDRQ, Lindeon, Rockford, Corescythe, Corfyne
+

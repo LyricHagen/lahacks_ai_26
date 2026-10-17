@@ -1,0 +1,7 @@
+{
+  "purpose": "gate_check",
+  "note": "Committed demo result for the gate check on /admin/usage. Demo mode reads this file and never calls a model.",
+  "output": {
+    "reply": "Reachable. This is the committed demo answer, so no tokens were spent."
+  }
+}

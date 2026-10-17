@@ -1,0 +1,214 @@
+@import "tailwindcss";
+
+/*
+  Design tokens. Read CLAUDE.md "UI/UX RULES" before changing anything here.
+  - One accent (rust), defined once as --accent. Everything else is a neutral ramp.
+  - Status colors: accent, --danger (muted red), --success (muted green). Always paired with a word.
+  - Radius is 0 and shadows are none, enforced below with !important.
+*/
+
+:root {
+  color-scheme: light;
+  --bg: #f5f4f1;
+  --bg-raised: #fbfaf8;
+  --bg-sunken: #ecebe7;
+  --bg-strong: #e2e0db;
+  --border: #d6d3cc;
+  --border-strong: #a9a59c;
+  --fg: #1c1b19;
+  --fg-muted: #57544e;
+  --fg-subtle: #7d7970;
+  --accent: #8a3a1e;
+  --accent-fg: #fbfaf8;
+  --accent-soft: #f0e3dc;
+  --danger: #973634;
+  --danger-soft: #f3e1df;
+  --success: #3c6544;
+  --success-soft: #e1ebe1;
+  --focus: var(--accent);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #151514;
+  --bg-raised: #1c1c1a;
+  --bg-sunken: #10100f;
+  --bg-strong: #282825;
+  --border: #33322f;
+  --border-strong: #55534e;
+  --fg: #e9e7e2;
+  --fg-muted: #aeaaa2;
+  --fg-subtle: #85817a;
+  --accent: #c8784f;
+  --accent-fg: #151514;
+  --accent-soft: #2e211b;
+  --danger: #d27c74;
+  --danger-soft: #2e1d1c;
+  --success: #8db592;
+  --success-soft: #1c2a1e;
+}
+
+/* Wipe Tailwind's defaults so forbidden things (rounded, shadow, default palette) do not exist. */
+@theme {
+  --color-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+  --font-*: initial;
+  --animate-*: initial;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-raised: var(--bg-raised);
+  --color-sunken: var(--bg-sunken);
+  --color-strong: var(--bg-strong);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-subtle: var(--fg-subtle);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-transparent: transparent;
+
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    border-color: var(--border);
+  }
+
+  html {
+    background: var(--bg);
+    color: var(--fg);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--fg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    line-height: 1.25;
+    font-weight: 600;
+    scroll-margin-top: 5rem;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  dialog::backdrop {
+    background: rgb(0 0 0 / 0.45);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+    }
+  }
+}
+
+@layer components {
+  /* Long-form text (privacy, terms, landing). */
+  .prose-w2a {
+    max-width: 68ch;
+    color: var(--fg);
+  }
+  .prose-w2a h2 {
+    font-size: 1.25rem;
+    margin-top: 2.5rem;
+    margin-bottom: 0.75rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border);
+  }
+  .prose-w2a h3 {
+    font-size: 1.05rem;
+    margin-top: 1.75rem;
+    margin-bottom: 0.5rem;
+  }
+  .prose-w2a p {
+    margin: 0.75rem 0;
+    color: var(--fg);
+  }
+  .prose-w2a ul,
+  .prose-w2a ol {
+    margin: 0.75rem 0;
+    padding-left: 1.25rem;
+  }
+  .prose-w2a ul {
+    list-style: square;
+  }
+  .prose-w2a ol {
+    list-style: decimal;
+  }
+  .prose-w2a li {
+    margin: 0.25rem 0;
+  }
+  .prose-w2a li::marker {
+    color: var(--fg-subtle);
+  }
+  .prose-w2a a {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .prose-w2a a:hover {
+    color: var(--accent);
+  }
+  .prose-w2a code {
+    font-size: 0.9em;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    padding: 0 0.25rem;
+  }
+}

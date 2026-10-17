@@ -1,0 +1,46 @@
+{
+  "name": "who2ask",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "check:rules": "node scripts/check-rules.mjs",
+    "check": "pnpm typecheck && pnpm check:rules",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:reset": "tsx --conditions=react-server scripts/db-reset.ts",
+    "seed": "tsx --conditions=react-server scripts/seed.ts",
+    "fixture:generate": "tsx --conditions=react-server scripts/generate-fixture.ts",
+    "seed:check": "tsx --conditions=react-server scripts/check-scenarios.ts",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "bcryptjs": "^3.0.3",
+    "drizzle-orm": "^0.45.4",
+    "next": "16.4.2",
+    "next-auth": "5.0.0-beta.32",
+    "postgres": "^3.4.9",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^22",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "drizzle-kit": "^0.31.11",
+    "postcss": "^8.5.30",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9"
+  }
+}
