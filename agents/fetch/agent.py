@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -93,6 +94,8 @@ def to_message(r: Reply, end: bool = False) -> ChatMessage:
 async def on_chat(ctx: Context, sender: str, msg: ChatMessage):
     await ctx.send(sender, ChatAcknowledgement(timestamp=datetime.now(timezone.utc), acknowledged_msg_id=msg.msg_id))
     text = " ".join(c.text for c in msg.content if isinstance(c, TextContent)).strip()
+    # ASI:One keeps an @mention of the agent in the text; it is not part of the problem.
+    text = re.sub(r"@agent1[a-z0-9]+[:,]?\s*", "", text).strip()
     if any(isinstance(c, StartSessionContent) for c in msg.content):
         log.info("session started by %s", short(sender))
         if not text:

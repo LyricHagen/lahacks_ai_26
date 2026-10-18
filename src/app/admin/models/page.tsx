@@ -125,7 +125,9 @@ function EvalTable({ r }: { r: EvalFile }) {
 
 export default async function Page() {
   return withPage("admin.models", async () => {
-    await requireAdmin("view /admin/models");
+    // Open to anyone on the development server (read only, for recording the demo); production keeps the admin check.
+    if (process.env.NODE_ENV === "development") log.branch("skip the admin check", "development server: /admin/models is open locally");
+    else await requireAdmin("view /admin/models");
     const header = (
       <PageHeader
         eyebrow="/admin/models"

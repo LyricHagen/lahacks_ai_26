@@ -75,7 +75,9 @@ export const proxy = auth(async (request) => {
       ...(incoming && incoming !== reqId ? { ignoredIncomingId: incoming.slice(0, 40) } : {}),
     });
 
-    if (isAdminPath(pathname)) {
+    if (isAdminPath(pathname) && pathname === "/admin/models" && process.env.NODE_ENV === "development") {
+      alog.branch("let /admin/models through without sign in", "development server: the models page is read only and open locally (production keeps the admin check)");
+    } else if (isAdminPath(pathname)) {
       const denied = await adminDecision(request, userId, reqId);
       if (denied) return denied;
     }
