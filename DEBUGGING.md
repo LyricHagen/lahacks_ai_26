@@ -1,4 +1,4 @@
-# Debugging Who2Ask
+# Debugging Altostratus
 
 The owner debugs this app by copying log output and pasting it into a fresh session. **Assume nobody can see the screen, only the log.** Logging is a first-class feature: code without logs is incomplete.
 
@@ -12,7 +12,7 @@ The owner debugs this app by copying log output and pasting it into a fresh sess
 | Terminal | `pnpm dev` prints every server line. |
 | One request | Filter by its id: `req_8f3a1c`. The id is in the `X-Request-Id` response header, in every JSON body as `reqId`, and in every `ErrorState`. |
 
-Copied text starts with a header line (`# Who2Ask log, drawer, last 50, ..., page /ask/new, copied ...`) so the pasted log says where it came from.
+Copied text starts with a header line (`# Altostratus log, drawer, last 50, ..., page /ask/new, copied ...`) so the pasted log says where it came from.
 
 ## Line format
 
@@ -176,7 +176,7 @@ Open the drawer on any page (or `grep "mode="`). Every page render logs exactly 
 | `global_budget_exhausted` | everyone's live tokens today reached `GLOBAL_DAILY_TOKEN_BUDGET` | same |
 | `approved_user` | LIVE | |
 
-`callModel` then repeats the checks right before spending (`gate 1/5` ... `gate 5/5`, the failing one at INFO with `FAIL`), and writes one `usage_log` row whose `outcome` names the first failed check (`mode_demo`, `not_approved`, `user_budget`, `global_budget`, `no_api_key`) or `provider_error`, or `live`. `/admin/usage` lists the last 50 with their request ids.
+`callModel` then repeats the checks right before spending (`gate 1/6` ... `gate 6/6`, the failing one at INFO with `FAIL`), and writes one `usage_log` row whose `outcome` names the first failed check (`mode_demo`, `not_approved`, `rate_limited`, `user_budget`, `global_budget`, `no_api_key`) or `provider_error`, or `live`. `/admin/usage` lists the last 50 with their request ids.
 
 ## Auth decisions
 
@@ -422,6 +422,16 @@ select value from app_meta where key in ('demo.state', 'demo.lock');
 select id, status, user_id, visitor_id from asks where source = 'demo' order by id;
 ```
 
+## Debugging hardening: validation, rate limits, Sentry
+
+| Symptom | Look for |
+|---|---|
+| A button shows `BAD_REQUEST` | `input refused by schema: <field> <issue>` on the action's logger (values are never logged). The schemas are in `src/lib/inputs.ts`; an action missing from `ActionInputs` is refused with `No input schema for action ...` (500), so add one with every new action |
+| An API route answers 400 | `params refused by schema` or `query refused by schema` on `api.input` |
+| `RATE_LIMITED` | `rate limit: deny <bucket> from <ip or usr_N or vis_...>`. Buckets in `RATE_LIMITS` (`src/lib/rate-limit.ts`): `ask`/`ask_owner` (new asks), `ask_run`/`ask_run_owner` (the run route), `model_ip`/`model_user` (live calls, gate check 3/6; a refusal there serves the demo result with outcome `rate_limited`, not an error). Reset locally: `delete from rate_limits;` |
+| A live call refused at `gate 3/6` | the rate limit line just above it says which subject is over |
+| Was it reported to Sentry? | only 5xx failures from `withRoute`/`withAction` and uncaught render errors (`onRequestError`). Sentry tags `req_id`, so search the issue by the request id from the log line. Spans: `model.<purpose>`, `ask.step.<state>`, `ask.retrieve`, `ask.rank` |
+
 ## Known gotchas
 
 - If the browser reload-loops in dev (`GET /` and `[Fast Refresh] rebuilding` repeating), the Turbopack cache is stale: stop the server, `rm -rf .next`, restart.
@@ -432,7 +442,8 @@ select id, status, user_id, visitor_id from asks where source = 'demo' order by 
 - `chrome --headless --screenshot` and `--dump-dom` stop before streamed Suspense boundaries hydrate, so a ToC under a `loading.tsx` looks stuck on its skeleton in those captures. Check with a real page lifecycle instead (Chrome DevTools protocol, or a real browser). Headless Chrome also has a minimum window width of about 500px; use device metrics emulation for 375px checks.
 - The render that follows a login, logout or demo toggle action in the same request still sees the old cookie, so its `session:` and `mode=` lines describe the state before the action. The next request is correct. Look at the next request id.
 - Next's own dev terminal logging of server function arguments is turned off in `next.config.ts` (it printed raw passwords and confidential notes). After changing `next.config.ts`, if pages start re-navigating by themselves, `rm -rf .next` and restart.
-- Locally every request comes from `::1`, so all signup and login attempts share one rate limit bucket. To reset: `delete from rate_limits;`.
+- Locally every request comes from `::1`, so all signup, login, ask and model-call attempts share one per-IP bucket each. To reset: `delete from rate_limits;`.
+- Never run prettier or any formatter on this repo: there is no config, and it reflows the long hand-written lines. If it happens, `.next/dev/server/chunks/**/*.map` holds the original source (`sourcesContent`).
 - `src/lib/mode.ts` and `src/lib/model.ts` must not import `next/navigation` (directly or through `src/lib/auth.ts`), or scripts that call `callModel` fail with `createContext is not a function`. Request-bound helpers go in `src/lib/mode-request.ts`.
 - Modules used by scripts must not import `src/lib/auth.ts` or `src/lib/mode-request.ts` (they pull in `next/navigation`). That is why the understanding helpers live in `src/lib/understand-build.ts` and the step (which needs the session and mode) in `src/lib/ask-understand.ts`.
 - Passing a JS `Date` into a raw ``sql`...` `` template fails with `ERR_INVALID_ARG_TYPE`; pass `.toISOString()` with `::timestamptz`, or use drizzle operators (`gte(col, date)`), which serialize it.

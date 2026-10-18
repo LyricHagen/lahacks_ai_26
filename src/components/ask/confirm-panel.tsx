@@ -54,7 +54,7 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
 }
 
 /**
- * The confirming state: what Who2Ask understood as editable chips, then the document check. The
+ * The confirming state: what Altostratus understood as editable chips, then the document check. The
  * search uses exactly what is confirmed here, so a wrong parse is fixed before anyone is searched.
  */
 export function ConfirmPanel({ askId, u, docs, services, skills, canAct }: { askId: string; u: Understanding; docs: DocCheckView[]; services: Option[]; skills: Option[]; canAct: boolean }) {
@@ -106,7 +106,7 @@ export function ConfirmPanel({ askId, u, docs, services, skills, canAct }: { ask
       <section aria-labelledby="understood-h" className="border border-line bg-raised">
         <header className="border-b border-line px-4 py-3">
           <h2 id="understood-h" className="text-[15px] font-semibold">
-            What Who2Ask understood
+            What Altostratus understood
           </h2>
           <p className="mt-0.5 text-[13px] text-muted">Remove anything wrong and add what is missing. The search uses exactly this.</p>
         </header>
@@ -119,6 +119,7 @@ export function ConfirmPanel({ askId, u, docs, services, skills, canAct }: { ask
             {VIA_LINE[u.via]}
             {u.note ? ` ${u.note}` : ""}
           </p>
+          {u.parse ? <p className="-mt-2 mb-3 font-mono text-[12px] text-muted">{u.parse.line}</p> : null}
 
           <Row label="Services" hint="Owners are searched first">
             {svc.map((s) => (

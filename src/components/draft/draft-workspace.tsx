@@ -277,7 +277,7 @@ export function DraftWorkspace({ variant }: { variant: DraftVariant }) {
         <li className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2">
           <span className="font-mono text-[13px] text-muted">2</span>
           <p>
-            Open {app} and send it {where} yourself. Who2Ask has no access to {app} and cannot send it for you.
+            Open {app} and send it {where} yourself. Altostratus has no access to {app} and cannot send it for you.
           </p>
         </li>
         <li className="grid grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-2">
@@ -326,7 +326,7 @@ export function DraftWorkspace({ variant }: { variant: DraftVariant }) {
         }
       >
         <div className="grid gap-2">
-          <p>Who2Ask has not sent anything. Say yes only once the message is in {app}.</p>
+          <p>Altostratus has not sent anything. Say yes only once the message is in {app}.</p>
           {data.load ? (
             <p>
               It counts toward {data.recipient.firstName}&apos;s asks this week:{" "}

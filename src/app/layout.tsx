@@ -19,7 +19,7 @@ const plexSans = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "500", "600
 const plexMono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-plex-mono", display: "swap" });
 
 export const metadata: Metadata = {
-  title: { default: "Who2Ask", template: "%s | Who2Ask" },
+  title: { default: "Altostratus", template: "%s | Altostratus" },
   description: "Find the right colleague to ask, see why, check when they are free, and draft the message. You send it yourself.",
 };
 

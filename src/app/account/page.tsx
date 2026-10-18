@@ -7,7 +7,7 @@ import { budgetLimits } from "@/lib/budget";
 import { MODE_REASON_LABEL, resolveMode } from "@/lib/mode";
 import { getRequestedMode } from "@/lib/mode-request";
 import { withPage } from "@/lib/request-context";
-import { DemoToggle, LogoutButton } from "./account-controls";
+import { DeleteAccount, DemoToggle, LogoutButton } from "./account-controls";
 
 export const metadata = { title: "Account" };
 
@@ -83,6 +83,17 @@ export default async function Page() {
               </dl>
             </CardBody>
           </Card>
+          {user.isDemo ? null : (
+            <Card>
+              <CardHeader title="Delete your account" />
+              <CardBody>
+                <p className="mb-4 text-sm text-muted">
+                  Removes your account and everything tied to it: profile, asks, drafts, ramp plans, dismissals and usage records. See the <a href="/privacy#deleting-your-account">privacy policy</a>.
+                </p>
+                <DeleteAccount />
+              </CardBody>
+            </Card>
+          )}
         </div>
       </Container>
     );

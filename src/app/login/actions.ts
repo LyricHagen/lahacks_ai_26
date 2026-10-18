@@ -1,6 +1,6 @@
 "use server";
 
-import { loginAction, logoutAction, setDemoToggleAction, signupAction } from "@/lib/auth-actions";
+import { deleteAccountAction, loginAction, logoutAction, setDemoToggleAction, signupAction } from "@/lib/auth-actions";
 
 // "use server" files may only export async functions, so the wrapped actions live in src/lib/auth-actions.ts.
 export async function login(input: { email: string; password: string; next?: string }) {
@@ -14,4 +14,7 @@ export async function logout() {
 }
 export async function setDemoToggle(input: { demo: boolean }) {
   return setDemoToggleAction(input);
+}
+export async function deleteAccount(input: { confirm: string }) {
+  return deleteAccountAction(input);
 }

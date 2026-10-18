@@ -93,7 +93,7 @@ export function useDebugState(): State {
 /** Plain text for pasting into a chat: a header line, then one log line per row. */
 export function toPlainText(entries: readonly DebugEntry[], label: string): string {
   const where = typeof window !== "undefined" ? window.location.pathname + window.location.search : "";
-  const header = `# Who2Ask log, ${label}, ${entries.length} lines, page ${where}, copied ${wallNow().toISOString()}`;
+  const header = `# Altostratus log, ${label}, ${entries.length} lines, page ${where}, copied ${wallNow().toISOString()}`;
   return [header, ...entries.map((e) => e.line)].join("\n");
 }
 

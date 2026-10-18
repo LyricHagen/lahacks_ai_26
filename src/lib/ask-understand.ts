@@ -22,7 +22,20 @@ import { callModel } from "./model";
 import { understandFixture } from "./model-purposes";
 import { currentMode } from "./mode-request";
 import { askText, buildUnderstanding, loadCatalog } from "./understand-build";
-import { type ModelUnderstand, type UnderstandVia, understandingForLog } from "./understanding";
+import { type ModelUnderstand, type ParseInfo, type UnderstandVia, understandingForLog } from "./understanding";
+
+/** Plain names for the tier that read the ask, as the asker sees them. */
+const TIER_NAME: Record<string, string> = {
+  finetune: "the fine-tuned model (Qwen2.5 1.5B + LoRA on Veri)",
+  frontier: "Claude Haiku 5.5",
+  sonnet: "Claude Sonnet 5.5",
+  base: "the base Qwen2.5 1.5B model",
+  deterministic: "the keyword reader",
+};
+
+function fmtMs(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+}
 
 const log = createLogger("ask.understand");
 
@@ -36,7 +49,21 @@ export async function understandAsk({ askId, progress }: StepContext): Promise<S
 
   const input = { askId, text, catalog };
   const [user, mode] = await Promise.all([getSessionUser(), currentMode()]);
+  const t0 = performance.now();
   const r = await callModel({ purpose: "understand_ask", input, user, mode, askId });
+  const callMs = Math.round(performance.now() - t0);
+  let parse: ParseInfo;
+  if (r.source === "live") {
+    const fellBack = r.tier !== "finetune" && r.tierNote.includes("finetune failed");
+    parse = { tier: r.tier, ms: r.ms, model: r.model, recorded: false, line: `Parsed in ${fmtMs(r.ms)} by ${TIER_NAME[r.tier] ?? r.model}${fellBack ? " (the fine-tuned model did not answer in time)" : ""}.` };
+  } else if (r.source === "fixture" && r.fixture.recorded) {
+    const rec = r.fixture.recorded;
+    parse = { tier: rec.tier, ms: rec.ms, model: rec.model, recorded: true, line: `Parsed in ${fmtMs(rec.ms)} by ${TIER_NAME[rec.tier] ?? rec.model} (recorded live run, replayed in demo mode).` };
+  } else {
+    parse = { tier: "deterministic", ms: callMs, model: "keywords", recorded: false, line: `Parsed in ${fmtMs(callMs)} by ${TIER_NAME.deterministic} (no live model in demo mode).` };
+  }
+  log.info(`${askId} parse ${parse.tier} ${parse.ms}ms${parse.recorded ? " (recorded)" : ""}: ${parse.line}`, { askId });
+  await progress(parse.line.replace(/^Parsed/, "parsed").replace(/\.$/, ""));
   let output: ModelUnderstand;
   let via: UnderstandVia;
   let note: string | null = null;
@@ -54,7 +81,7 @@ export async function understandAsk({ askId, progress }: StepContext): Promise<S
     log.branch(`${askId} understood via=${via}`, `${r.outcome}: ${recorded ? `recorded live answer hash=${r.fixture.hash}` : f.detail}`, { askId, outcome: r.outcome });
   }
 
-  const u = buildUnderstanding({ label: askId, text, catalog, output, via, note, askUrgency: ask.urgency });
+  const u = buildUnderstanding({ label: askId, text, catalog, output, via, note, askUrgency: ask.urgency, parse });
   log.info(`${askId} understood via=${via}: ${u.services.length} services (${u.services.map((s) => s.name).join(", ") || "none"}), ${u.skills.length} skills (${u.skills.map((s) => s.name).join(", ") || "none"}), help ${u.helpKind}, urgency ${u.urgency}, ${u.artifacts.length} artifacts, ${u.sensitive.length} sensitive`, { askId });
   log.info(`${askId} understanding JSON ${JSON.stringify(understandingForLog(u))}`, { askId });
 

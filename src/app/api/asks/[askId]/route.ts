@@ -2,11 +2,12 @@ import { ASK_STATE_DEFS } from "@/lib/ask-state";
 import { stepBuilt } from "@/lib/ask-pipeline";
 import { asRetrieval } from "@/lib/ask-review";
 import { getAskStatus } from "@/lib/asks";
-import { ok, withRoute } from "@/lib/request-context";
+import { ParamSchemas } from "@/lib/inputs";
+import { ok, parseParams, withRoute } from "@/lib/request-context";
 
 /** Polled by /ask/[askId] while the ask is processing: state, the live status line, and per-path retrieval counts. */
 export const GET = withRoute<{ askId: string }>("ask.status", async (_req, { params }) => {
-  const { askId } = await params;
+  const { askId } = parseParams(ParamSchemas.askId, await params, "ask.status");
   const s = await getAskStatus(askId);
   return ok({
     askId,

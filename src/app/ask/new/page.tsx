@@ -24,7 +24,7 @@ export default async function Page() {
         <PageHeader
           eyebrow="/ask/new"
           title="What are you stuck on?"
-          description="Write it the way you would say it to a teammate. Who2Ask finds the right person, says why, checks when they are free and drafts the message. You send it yourself."
+          description="Write it the way you would say it to a teammate. Altostratus finds the right person, says why, checks when they are free and drafts the message. You send it yourself."
         />
         <p className="mb-6 text-sm text-muted">
           Asking as{" "}

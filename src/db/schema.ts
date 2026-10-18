@@ -285,11 +285,17 @@ export const usageLog = pgTable(
     mode: text("mode").notNull().default("demo"),
     /**
      * What happened: "live" (model answered), or the first gate check that failed: "mode_demo",
-     * "not_approved", "user_budget", "global_budget", "no_api_key", or "provider_error".
+     * "not_approved", "rate_limited", "user_budget", "global_budget", "no_api_key", or "provider_error".
      */
     outcome: text("outcome").notNull().default("live"),
     /** Error code when the provider call failed (MODEL_CALL_FAILED, ...). */
     errorCode: text("error_code"),
+    /** Who answered: anthropic, veri, or fixture (a demo result). */
+    provider: text("provider"),
+    /** Which link of the purpose's chain served it: finetune, base, frontier, recorded, deterministic. */
+    tier: text("tier"),
+    /** Why that tier: earlier tiers skipped or failed, with codes and times. */
+    tierNote: text("tier_note"),
     /** Plain text, not a foreign key, so spend history survives a reseed that removes asks. */
     askId: text("ask_id"),
     reqId: text("req_id"),

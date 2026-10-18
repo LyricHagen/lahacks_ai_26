@@ -1,0 +1,5 @@
+import { DraftSkeleton } from "@/components/page-skeletons";
+
+export default function Loading() {
+  return <DraftSkeleton />;
+}

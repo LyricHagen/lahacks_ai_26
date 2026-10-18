@@ -18,6 +18,7 @@ import { rankAsk } from "./ask-rank-step";
 import { retrieveAsk } from "./ask-retrieve-step";
 import { understandAsk } from "./ask-understand";
 import { AppError, toAppError } from "./errors";
+import { span } from "./observe";
 import { createLogger, currentReqId } from "./log";
 
 const log = createLogger("ask.pipeline");
@@ -111,7 +112,7 @@ export async function runAskPipeline(askId: string, opts: { paceMs?: number } = 
       }
       let result: StepResult;
       try {
-        result = await log.timed(`${askId} step ${state}`, () => step({ askId, progress }), { askId });
+        result = await span(`ask.step.${state}`, "ask.step", { ask_id: askId, state }, () => log.timed(`${askId} step ${state}`, () => step({ askId, progress }), { askId }));
       } catch (err) {
         const appErr = toAppError(err, "ASK_STEP_FAILED");
         const code = appErr.code === "UNKNOWN" ? "ASK_STEP_FAILED" : appErr.code;

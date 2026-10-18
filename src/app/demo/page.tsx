@@ -45,7 +45,7 @@ export default async function Page() {
         <PageHeader
           eyebrow="/demo"
           title="Guided demo"
-          description="Who2Ask finds the right colleague to ask and drafts the message. See it in four short steps, using one new hire's real problem."
+          description="Altostratus finds the right colleague to ask and drafts the message. See it in four short steps, using one new hire's real problem."
         />
         <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_18rem]">
           <section aria-labelledby="steps-h">

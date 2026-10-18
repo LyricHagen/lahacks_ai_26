@@ -137,7 +137,7 @@ export default async function Page() {
                 Where documentation failed
               </h2>
               <p className="mb-4 text-[13px] text-muted">
-                Documents Who2Ask offered before searching for a person, where the asker said &quot;No, find a person&quot;. Each one is a page that exists and still did not
+                Documents Altostratus offered before searching for a person, where the asker said &quot;No, find a person&quot;. Each one is a page that exists and still did not
                 answer the question.
               </p>
               {panels ? (

@@ -140,5 +140,5 @@ function cleanStrings(v: unknown): unknown {
 }
 
 function toEntry(r: LiveRecord): RecordedEntry {
-  return { hash: r.hash, label: r.label, recordedAt: wallNow().toISOString(), model: r.model, inputTokens: r.usage.inputTokens, outputTokens: r.usage.outputTokens, output: cleanStrings(r.output) };
+  return { hash: r.hash, label: r.label, recordedAt: wallNow().toISOString(), model: r.model, inputTokens: r.usage.inputTokens, outputTokens: r.usage.outputTokens, output: cleanStrings(r.output), tier: r.tier, ms: r.ms };
 }

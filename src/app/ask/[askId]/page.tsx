@@ -346,7 +346,7 @@ export default async function Page({ params }: { params: Promise<{ askId: string
 
           {showUnderstanding && u ? (
             <Card>
-              <CardHeader title="What Who2Ask understood" meta="As confirmed before the search" />
+              <CardHeader title="What Altostratus understood" meta="As confirmed before the search" />
               <CardBody>
                 <UnderstandingSummary u={u} />
               </CardBody>

@@ -96,6 +96,10 @@ export function Composer({ examples, limits }: { examples: Example[]; limits: { 
           autoFocus
         />
       </Field>
+      <p className="-mt-3 text-[13px] text-muted">
+        Data note: in live mode this text goes to a model provider to read it; emails, phone numbers, secrets and personal sentences are flagged and kept
+        out of the draft. Details in the <a href="/privacy#model-providers">privacy policy</a>.
+      </p>
 
       {examples.length ? (
         <div>
@@ -146,7 +150,7 @@ export function Composer({ examples, limits }: { examples: Example[]; limits: { 
                 </span>
               </label>
             ))}
-            <p className="text-[13px] text-muted">Lower urgency means Who2Ask prefers an asynchronous message over taking someone&apos;s time.</p>
+            <p className="text-[13px] text-muted">Lower urgency means Altostratus prefers an asynchronous message over taking someone&apos;s time.</p>
           </fieldset>
 
           <Field

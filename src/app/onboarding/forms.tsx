@@ -139,7 +139,7 @@ export function ContextForm({
       <fieldset>
         <legend className="text-sm font-medium">What you already know</legend>
         <p className="mb-3 mt-1 text-[13px] text-muted">
-          Things nobody needs to explain to you. Who2Ask will not send you to someone just to learn these. <span className="font-mono">{known.size}</span> selected.
+          Things nobody needs to explain to you. Altostratus will not send you to someone just to learn these. <span className="font-mono">{known.size}</span> selected.
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
           {groups.map((g) => (

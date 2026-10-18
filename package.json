@@ -1,5 +1,5 @@
 {
-  "name": "who2ask",
+  "name": "altostratus",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -26,10 +26,16 @@
     "ramp:check": "tsx --conditions=react-server scripts/check-ramp.ts",
     "demo:check": "tsx --require ./scripts/lib/no-server-only.cjs scripts/demo-check.ts",
     "fixtures:record": "tsx --require ./scripts/lib/no-server-only.cjs scripts/record-fixtures.ts",
+    "train:generate": "tsx --conditions=react-server scripts/train/generate.ts",
+    "train:prep": "tsx --conditions=react-server scripts/train/prep.ts",
+    "train:eval": "tsx --conditions=react-server scripts/train/eval.ts",
+    "preflight": "tsx --conditions=react-server scripts/preflight.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
+    "@sentry/core": "10.76.0",
+    "@sentry/nextjs": "10.76.0",
     "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.45.4",
     "next": "16.4.2",

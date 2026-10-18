@@ -121,7 +121,7 @@ export function LiveStatus({ askId, initialState, initialProgress, canRun }: { a
       ) : (
         <>
           <p className="text-[13px] text-muted">
-            {state === "understanding" ? "What Who2Ask understood will appear here for you to check." : state === "drafting" ? "The draft will open here for you to edit. Nothing is sent." : "The shortlist will appear here."}
+            {state === "understanding" ? "What Altostratus understood will appear here for you to check." : state === "drafting" ? "The draft will open here for you to edit. Nothing is sent." : "The shortlist will appear here."}
           </p>
           {state === "drafting" ? <SkeletonCard lines={6} /> : <SkeletonList count={3} />}
         </>

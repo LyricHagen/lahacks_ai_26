@@ -22,7 +22,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ n
     log.debug("rendering login form", { next: safeNext(next) });
     return (
       <Container className="max-w-md">
-        <PageHeader eyebrow="/login" title="Log in" description="Everything in Who2Ask is browsable without an account. An approved account adds live model results." />
+        <PageHeader eyebrow="/login" title="Log in" description="Everything in Altostratus is browsable without an account. An approved account adds live model results." />
         <AuthForm kind="login" next={safeNext(next) ?? undefined} />
       </Container>
     );

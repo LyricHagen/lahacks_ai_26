@@ -1,3 +1,4 @@
+import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -9,7 +10,14 @@ const nextConfig: NextConfig = {
   // passwords and confidential ask notes in the terminal. withAction logs inputs with redaction.
   logging: { serverFunctions: false },
   // The reseed button reads the committed fixture at runtime; make sure it ships with the server.
-  outputFileTracingIncludes: { "/admin/**": ["./fixtures/company.json"] },
+  // /admin/models reads the committed eval results the same way.
+  outputFileTracingIncludes: { "/admin/**": ["./fixtures/company.json", "./data/understand/eval/results.json"] },
 };
 
-export default nextConfig;
+// Source maps upload only when SENTRY_AUTH_TOKEN (plus SENTRY_ORG, SENTRY_PROJECT) is set; the
+// build passes without any of them.
+export default withSentryConfig(nextConfig, {
+  silent: !process.env.CI,
+  telemetry: false,
+  sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+});

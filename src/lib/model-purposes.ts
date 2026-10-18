@@ -11,7 +11,9 @@ import explainFixtureFile from "../../fixtures/demo/explain_ranking.json";
 import understandFixtureFile from "../../fixtures/demo/understand_ask.json";
 import rampFixtureFile from "../../fixtures/demo/ramp_plan.json";
 import { CALL_MINUTES, type DraftInput, type DraftOutput, type DraftText, type DraftVariant, DRAFT_VARIANTS, firstPerson, WORD_LIMIT } from "./draft";
-import type { PurposeSpec } from "./model";
+import type { ModelRequest, PurposeSpec, TierRequest } from "./model";
+import { veriConfig, veriTimeoutMs, veriUnavailable } from "./model-veri";
+import { compactMessages, extractJsonObject, fullMessages } from "./understand-compact";
 import { RAMP_LEARN_MAX, RAMP_LEARN_MIN } from "./ramp-types";
 import { type Catalog, extractByKeywords, MODEL_UNDERSTAND_JSON_SCHEMA, type ModelUnderstand, ModelUnderstandSchema } from "./understanding";
 
@@ -63,6 +65,68 @@ const fixtureText: PurposeSpec<FixtureTextInput, Array<{ id: string; text: strin
   fixture: () => null,
 };
 
+export type PhrasingInput = { batch: string; specs: unknown[] };
+export type PhrasingOutput = Array<{ id: string; text: string; restatement: string; sensitive: Array<{ text: string; why: string }> }>;
+
+/**
+ * Training data for the understand_ask fine-tune (scripts/train/generate.ts, owner only). Each spec
+ * is a known-correct label; the model writes the messy question that leads to it. No demo fixture:
+ * no user can trigger it, and the gate refuses its script actor inside the web server.
+ */
+const trainPhrasing: PurposeSpec<PhrasingInput, PhrasingOutput> = {
+  describe: (i) => i.batch,
+  request: (i) => ({
+    model: CHEAP_MODEL,
+    system: [
+      "You write realistic questions that new hires at Ferndale Systems (a fictional freight software company) type into an internal help tool.",
+      "For each spec you get the CORRECT reading of the question (services, skills, artifacts, kind of help, urgency, sensitive items). Write the question that a person would type, so that a careful reader would arrive at exactly that reading.",
+      "Rules for text:",
+      "- Write in the spec's language and style. Make it sound like a real person: messy, specific, sometimes unsure. 15 to 110 words.",
+      "- services: when namesAllowed is true, mention each service by its name or repo at least once. When namesAllowed is false, never write the service name or repo; describe what it does in plain words instead.",
+      "- Never mention any other service, repo, tool or team by name, and never paste another error, ticket id, link or repo.",
+      "- skills: make it clear the problem involves each listed skill (naming it is fine).",
+      "- artifacts: include each artifact text exactly, character for character (errors may be in quotes). These are the only quoted strings.",
+      "- helpKind: where_is asks where something lives; how_works asks how something works; is_expected asks whether behaviour is normal; unblock says something fails and they are stuck; who_decides asks for a decision or approval.",
+      "- urgency: blocked_now says they are blocked right now or production is affected; blocked_today says they need it today; curious says there is no rush; null means say nothing at all about timing.",
+      "- sensitive items with a text: include that text exactly. Items with a topic: write one natural sentence where the asker mentions that personal matter about themselves, and return that exact sentence.",
+      "- No services and no skills means a genuinely vague question that names nothing specific.",
+      "Rules for restatement: one plain English sentence starting with \"You\" saying what they need, naming the services, no people's names, nothing from the sensitive items. Never use em dashes or en dashes anywhere.",
+      "Return sensitive as the exact substrings of text that are sensitive (one per item), each with the given why.",
+    ].join("\n"),
+    prompt: `Specs:\n${JSON.stringify(i.specs, null, 1)}`,
+    maxTokens: 12_000,
+    effort: "low",
+    timeoutMs: 5 * 60_000,
+    jsonSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["items"],
+      properties: {
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["id", "text", "restatement", "sensitive"],
+            properties: {
+              id: { type: "string" },
+              text: { type: "string" },
+              restatement: { type: "string" },
+              sensitive: { type: "array", items: { type: "object", additionalProperties: false, required: ["text", "why"], properties: { text: { type: "string" }, why: { type: "string" } } } },
+            },
+          },
+        },
+      },
+    },
+  }),
+  parse: (text) => {
+    const raw = JSON.parse(text) as { items?: unknown };
+    if (!Array.isArray(raw.items)) throw new Error("train_phrasing output has no items array");
+    return raw.items as PhrasingOutput;
+  },
+  fixture: () => null,
+};
+
 export type UnderstandInput = { askId: string; text: string; catalog: Catalog };
 
 /**
@@ -87,9 +151,25 @@ function keywordFixture(input: UnderstandInput) {
   return { output: k.output, via: "keywords" as const, detail: k.reasons.join("; ") };
 }
 
+/** A Veri chat request from the shared prompt builders (src/lib/understand-compact.ts). */
+function veriRequest(kind: "finetune" | "base", i: UnderstandInput): TierRequest {
+  const config = veriConfig(kind);
+  if (!config) return { tier: kind, req: null, unavailable: veriUnavailable() ?? "not configured", chain: kind === "finetune" };
+  const [system, user] = (kind === "finetune" ? compactMessages : fullMessages)(i.text, i.catalog);
+  const req: ModelRequest = { provider: "veri", veri: config, model: kind === "finetune" ? "altostratus-understand" : config.model, system: system.content, prompt: user.content, maxTokens: 600, timeoutMs: kind === "finetune" ? veriTimeoutMs() : 60_000 };
+  return { tier: kind, req, chain: kind === "finetune" };
+}
+
 /** Reads a new hire's ask into strict JSON: services, skills, artifacts, kind of help, urgency, sensitive spans. */
 const understandAsk: PurposeSpec<UnderstandInput, ModelUnderstand> = {
   describe: (i) => i.askId,
+  // The fine-tuned 1.5B model on Veri first (scripts/train/README.md), then the request below.
+  // "base" (the same model untuned, full prompt) and "sonnet" exist only for the eval.
+  tiers: (i) => [
+    veriRequest("finetune", i),
+    veriRequest("base", i),
+    { tier: "sonnet", req: { ...understandAsk.request(i), model: "claude-sonnet-5-5" }, chain: false },
+  ],
   // The words of the ask and which services and skills exist; not the ask id.
   key: (i) => ({ text: i.text, services: i.catalog.services.map((s) => s.id).sort(), skills: i.catalog.skills.map((s) => s.id).sort() }),
   request: (i) => ({
@@ -103,8 +183,15 @@ const understandAsk: PurposeSpec<UnderstandInput, ModelUnderstand> = {
       "- helpKind: where_is (where something lives), how_works (how something works), is_expected (is this behaviour normal), unblock (something fails and they are stuck), who_decides (a decision or approval).",
       "- urgency: blocked_now, blocked_today or curious if the text says so, otherwise null.",
       "- sensitive: exact substrings that should stay out of a message to a colleague: credentials, personal contact details, health, pay, immigration, HR or legal matters, customer personal data. Empty when there are none.",
+      "- The question may be in any language; the restatement is always English.",
+      "",
+      // The catalog sits in the cached system prefix: every ask shares it, only the question varies.
+      `Catalog of services (id: name, repo, what it does):\n${i.catalog.services.map((s) => `${s.id}: ${s.name}, ${s.repo}, ${s.description ?? ""}`).join("\n")}`,
+      "",
+      `Catalog of skills (id: name, other words):\n${i.catalog.skills.map((s) => `${s.id}: ${s.name}${s.aliases.length ? ` (${s.aliases.join(", ")})` : ""}`).join("\n")}`,
     ].join("\n"),
-    prompt: `Catalog of services (id: name, repo, what it does):\n${i.catalog.services.map((s) => `${s.id}: ${s.name}, ${s.repo}, ${s.description ?? ""}`).join("\n")}\n\nCatalog of skills (id: name, other words):\n${i.catalog.skills.map((s) => `${s.id}: ${s.name}${s.aliases.length ? ` (${s.aliases.join(", ")})` : ""}`).join("\n")}\n\nThe question:\n<question>\n${i.text}\n</question>`,
+    prompt: `The question:\n<question>\n${i.text}\n</question>`,
+    cacheSystem: true,
     maxTokens: 1500,
     effort: "low",
     timeoutMs: 30_000,
@@ -113,7 +200,7 @@ const understandAsk: PurposeSpec<UnderstandInput, ModelUnderstand> = {
   parse: (text) => {
     let raw: unknown;
     try {
-      raw = JSON.parse(text);
+      raw = JSON.parse(extractJsonObject(text));
     } catch (err) {
       throw new Error(`understand_ask output is not JSON: ${(err as Error).message}`);
     }
@@ -452,6 +539,7 @@ export const PURPOSES = {
   draft_ask: draftAsk,
   ramp_plan: rampPlan,
   fixture_text: fixtureText,
+  train_phrasing: trainPhrasing,
 };
 
 export type PurposeName = keyof typeof PURPOSES;

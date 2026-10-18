@@ -12,6 +12,7 @@ import { embedText } from "./embed";
 import { AppError } from "./errors";
 import { getClock } from "./clock-request";
 import { createLogger } from "./log";
+import { span } from "./observe";
 import { emptyRetrieval, type RetrievalSummary, retrieveCandidates } from "./retrieve";
 import { normalizeUnderstanding } from "./understanding";
 
@@ -36,7 +37,8 @@ export async function retrieveAsk({ askId, progress }: StepContext): Promise<Ste
   const live: RetrievalSummary = emptyRetrieval();
   await q("ask.retrieve.reset", (db) => db.update(t.asks).set({ retrieval: live }).where(eq(t.asks.id, askId)));
 
-  const { candidates, summary } = await retrieveCandidates({
+  const { candidates, summary } = await span("ask.retrieve", "ai.retrieval", { ask_id: askId }, async () =>
+    retrieveCandidates({
     label: askId,
     // The restatement and confirmed names count as the asker's words for the semantic and doc paths.
     text: [text, u.restatement, ...u.services.map((s) => s.name), ...u.skills.map((s) => s.name)].join("\n"),
@@ -48,7 +50,8 @@ export async function retrieveAsk({ askId, progress }: StepContext): Promise<Ste
       await q("ask.retrieve.path", (db) => db.update(t.asks).set({ retrieval: { ...live, paths: all } }).where(eq(t.asks.id, askId)));
       await progress(s.status === "skipped" ? `${s.label.toLowerCase()}: skipped, ${s.note}` : `${s.label.toLowerCase()}: ${s.people} ${s.people === 1 ? "person" : "people"}`);
     },
-  });
+    }),
+  );
 
   await getDb().transaction(async (tx) => {
     await qIn(tx, "ask.candidates.clear", (h) => h.delete(t.askCandidates).where(eq(t.askCandidates.askId, askId)));

@@ -78,6 +78,13 @@
       "when": 1792296791474,
       "tag": "0010_demo_account",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792301115810,
+      "tag": "0011_model_tiers",
+      "breakpoints": true
     }
   ]
 }

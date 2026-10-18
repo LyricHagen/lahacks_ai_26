@@ -1,5 +1,5 @@
 import "server-only";
-// The asker confirms (and corrects) what Who2Ask understood, and says whether an offered document
+// The asker confirms (and corrects) what Altostratus understood, and says whether an offered document
 // already answers the ask. One action, one transition:
 //
 //   confirming -> answered     a document answered it (no person is bothered)

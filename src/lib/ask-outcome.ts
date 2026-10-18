@@ -1,5 +1,5 @@
 import "server-only";
-// After the draft: the asker edits it, copies it, sends it themselves, and tells Who2Ask what
+// After the draft: the asker edits it, copies it, sends it themselves, and tells Altostratus what
 // happened. This is what closes the loop for load balancing: "I sent this" writes the `sent`
 // transition with the recipient on it, and loadsThisWeek (src/lib/availability.ts) counts exactly
 // those rows, so the next ranking sees the recipient one ask busier.

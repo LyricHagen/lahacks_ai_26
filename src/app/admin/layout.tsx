@@ -12,6 +12,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             items={[
               { href: "/admin/users", label: "Accounts" },
               { href: "/admin/usage", label: "Model usage" },
+              { href: "/admin/models", label: "Models" },
               { href: "/admin/seed", label: "Synthetic company" },
             ]}
           />

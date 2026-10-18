@@ -14,7 +14,7 @@ const STEPS = [
   },
   {
     title: "Get a short list of people",
-    body: "Who2Ask reads the company directory, ownership records and past questions, then ranks the colleagues most likely to help.",
+    body: "Altostratus reads the company directory, ownership records and past questions, then ranks the colleagues most likely to help.",
   },
   {
     title: "See why each person is on it",
@@ -26,7 +26,7 @@ const STEPS = [
   },
   {
     title: "Send it yourself",
-    body: "Who2Ask drafts a short, specific message. You edit it, copy it, and send it from your own account. It never sends anything for you.",
+    body: "Altostratus drafts a short, specific message. You edit it, copy it, and send it from your own account. It never sends anything for you.",
   },
 ];
 
@@ -57,7 +57,7 @@ export default async function LandingPage() {
               <p className="font-mono text-[12px] text-subtle mb-4">for people in their first months at a company</p>
               <h1 className="text-[2.25rem] leading-[1.15] font-semibold tracking-tight max-w-[18ch]">Know who to ask, and how to ask them.</h1>
               <p className="mt-5 text-lg text-muted max-w-[52ch]">
-                Describe a problem in plain words. Who2Ask finds the colleague most likely to help, tells you why, checks when they are free,
+                Describe a problem in plain words. Altostratus finds the colleague most likely to help, tells you why, checks when they are free,
                 and drafts the message. You always send it yourself.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">

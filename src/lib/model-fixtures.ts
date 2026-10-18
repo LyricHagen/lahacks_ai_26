@@ -30,6 +30,9 @@ export type RecordedEntry = {
   outputTokens: number;
   /** The model's raw JSON answer (ask ids as {ask#n}); replayed through the purpose's parse(). */
   output: unknown;
+  /** Which tier answered live and how long it took (shown as "parsed in 240ms" on replay). */
+  tier?: string;
+  ms?: number;
 };
 
 export type RecordedFile = { version: number; purpose: string; note: string; entries: Record<string, RecordedEntry> };

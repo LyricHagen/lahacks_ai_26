@@ -20,7 +20,7 @@ function download(entries: readonly DebugEntry[], label: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `who2ask-log-${label.replace(/\s+/g, "-")}-${stamp}.txt`;
+  a.download = `altostratus-log-${label.replace(/\s+/g, "-")}-${stamp}.txt`;
   a.click();
   URL.revokeObjectURL(url);
   log.info(`downloaded ${entries.length} lines`, { label });

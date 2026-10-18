@@ -1,4 +1,4 @@
-// What Who2Ask understood about an ask, defined once. No server imports: the confirm panel (client)
+// What Altostratus understood about an ask, defined once. No server imports: the confirm panel (client)
 // edits the same shape the server stores in asks.understanding.
 //
 // Three ways to get one, logged as via=...:
@@ -75,6 +75,17 @@ export const MODEL_UNDERSTAND_JSON_SCHEMA = {
 } as const;
 
 export type UnderstandVia = "model" | "fixture" | "keywords";
+
+/** Who read the ask and how long it took, shown as "Parsed in 240ms by ..." during understanding. */
+export type ParseInfo = {
+  /** finetune, frontier, recorded tier, or deterministic */
+  tier: string;
+  ms: number;
+  model: string;
+  /** true when a recorded live answer was replayed (demo mode): ms is the recorded call's time */
+  recorded: boolean;
+  line: string;
+};
 export type NamedRef = { id: string; name: string; matched: string };
 
 /** Stored in asks.understanding. */
@@ -96,6 +107,8 @@ export type Understanding = {
   editedByUser: boolean;
   /** One short line per correction ("removed service web"), newest last. */
   edits: string[];
+  /** Absent on asks understood before prompt 11. */
+  parse?: ParseInfo;
 };
 
 /** Old prompt 4 rows had only services, skills, urgency, words. Fill the rest so every reader sees one shape. */
@@ -119,6 +132,7 @@ export function normalizeUnderstanding(raw: unknown): Understanding | null {
     embeddingModel: r.embeddingModel ?? "",
     editedByUser: !!r.editedByUser,
     edits: Array.isArray(r.edits) ? r.edits : [],
+    parse: r.parse && typeof r.parse === "object" && typeof r.parse.line === "string" ? r.parse : undefined,
   };
 }
 

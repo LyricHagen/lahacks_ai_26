@@ -44,7 +44,7 @@
     ", which you are on",
     ", your department"
   ],
-  "whyFallback": "Who2Ask suggested you for this",
+  "whyFallback": "Altostratus suggested you for this",
   "short": {
     "subject": "Quick question{about}",
     "lines": [

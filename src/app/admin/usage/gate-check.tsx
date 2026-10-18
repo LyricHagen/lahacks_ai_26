@@ -12,7 +12,7 @@ const log = createLogger("admin.gate_check");
 
 type Result = Awaited<ReturnType<typeof runGateCheck>> extends infer R ? (R extends { ok: true; data: infer D } ? D : never) : never;
 
-/** Sends one tiny gate_check call through callModel, so the five checks can be watched in the log. */
+/** Sends one tiny gate_check call through callModel, so the six checks can be watched in the log. */
 export function GateCheck() {
   const router = useRouter();
   const toast = useToast();

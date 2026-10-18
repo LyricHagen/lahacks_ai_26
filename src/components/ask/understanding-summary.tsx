@@ -43,6 +43,7 @@ export function UnderstandingSummary({ u }: { u: Understanding }) {
         {VIA_LABEL[u.via]}
         {u.editedByUser ? `, corrected by you (${u.edits.length} ${u.edits.length === 1 ? "change" : "changes"})` : ", confirmed as read"}
         {u.note ? `. ${u.note}` : ""}
+        {u.parse ? `. ${u.parse.line}` : ""}
       </p>
     </div>
   );

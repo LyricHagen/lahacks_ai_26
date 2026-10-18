@@ -95,7 +95,7 @@ function AskStep({ v }: Ctx) {
           </p>
         </div>
       </Part>
-      <Part n={2} title="Who2Ask reads it" line={`It pulls out the service, skills and error as chips ${he.subject} can fix before anyone is searched.`}>
+      <Part n={2} title="Altostratus reads it" line={`It pulls out the service, skills and error as chips ${he.subject} can fix before anyone is searched.`}>
         {v.u ? (
           <div className="border border-line bg-raised px-4 py-3">
             <UnderstandingSummary u={v.u} />
@@ -125,7 +125,7 @@ function MatchStep({ v }: Ctx) {
   const primary = v.service?.primary;
   return (
     <div className="grid gap-8">
-      <Part n={1} title="The obvious expert is skipped" line="Who2Ask does not pile more asks onto someone already at their weekly limit, and it says so.">
+      <Part n={1} title="The obvious expert is skipped" line="Altostratus does not pile more asks onto someone already at their weekly limit, and it says so.">
         {whyNot ? (
           <div className="border border-line-strong bg-sunken px-4 py-3" data-why-not={whyNot.employeeId}>
             <p className="text-[13px] font-semibold">Why not {primary && primary.id === whyNot.employeeId ? primary.firstName : "the owner"}?</p>
@@ -160,7 +160,7 @@ function MessageStep({ v, inDemo }: Ctx) {
       <Part
         n={1}
         title={`A draft for ${s.recipient.firstName}`}
-        line={`Written only from the confirmed ask and the evidence${grounded ? ", and every name in it checked" : ""}. Who2Ask never sends anything.`}
+        line={`Written only from the confirmed ask and the evidence${grounded ? ", and every name in it checked" : ""}. Altostratus never sends anything.`}
       >
         <div className="grid gap-2 lg:max-w-2xl">
           <ReadOnlyMock {...people} format={m.format} subject={m.subject} body={m.body} when={s.input.slot?.label ?? null} statusLabel={s.sent ? "Sent" : "Draft"} />

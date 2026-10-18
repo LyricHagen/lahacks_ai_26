@@ -3,7 +3,7 @@
 // server imports: the draft editor (client) counts words and builds the copied text with the same
 // functions the server uses.
 //
-// Who2Ask never sends anything. It drafts, the asker edits, the asker sends it from their own
+// Altostratus never sends anything. It drafts, the asker edits, the asker sends it from their own
 // Slack, mail or calendar, then says so with "I sent this".
 
 export const DRAFT_VARIANTS = ["short", "full", "call"] as const;

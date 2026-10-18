@@ -50,7 +50,7 @@ export default async function Page({ params }: { params: Promise<{ docId: string
           ))}
         </article>
         <aside className="mt-10 border border-line bg-raised px-4 py-3 text-sm">
-          <p className="font-semibold">When Who2Ask offered this document</p>
+          <p className="font-semibold">When Altostratus offered this document</p>
           <p className="mt-1 text-muted">
             {verdicts.failed >= K_MIN_ASKS ? (
               <>

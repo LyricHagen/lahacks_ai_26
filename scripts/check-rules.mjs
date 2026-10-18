@@ -8,7 +8,7 @@ import { join, relative, extname } from "node:path";
 const ROOT = new URL("..", import.meta.url).pathname;
 const SCAN_DIRS = ["src", "drizzle", "docker", "scripts", "data", "fixtures"];
 const SCAN_ROOT_FILES = ["CLAUDE.md", "DEBUGGING.md", "README.md"];
-const EXTS = new Set([".ts", ".tsx", ".js", ".mjs", ".css", ".md", ".json", ".sql", ".txt", ".csv", ".yml", ".yaml"]);
+const EXTS = new Set([".ts", ".tsx", ".js", ".mjs", ".css", ".md", ".json", ".sql", ".txt", ".csv", ".jsonl", ".yml", ".yaml"]);
 const SELF = "scripts/check-rules.mjs";
 
 const RULES = [

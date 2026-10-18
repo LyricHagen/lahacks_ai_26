@@ -8,7 +8,7 @@ export function SiteFooter() {
   return (
     <footer className="mt-auto border-t border-line bg-sunken">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-4 text-[13px] text-muted">
-        <span>Who2Ask. Company data shown here is synthetic.</span>
+        <span>Altostratus. Company data shown here is synthetic.</span>
         <Link href="/privacy" className="hover:text-fg">
           Privacy
         </Link>

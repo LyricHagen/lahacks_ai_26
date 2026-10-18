@@ -24,7 +24,7 @@ export default async function Page() {
       log.branch("prefill context with saved answers", "step was saved before", { userId: user.id });
     }
     return (
-      <OnboardingFrame step="context" user={user} profile={profile} title="What you already know" description="Two questions. They shape who Who2Ask suggests and what your ramp plan covers.">
+      <OnboardingFrame step="context" user={user} profile={profile} title="What you already know" description="Two questions. They shape who Altostratus suggests and what your ramp plan covers.">
         <ContextForm groups={groups} initialKnown={known} initialFocus={focus} focusMax={FOCUS_MAX} />
       </OnboardingFrame>
     );

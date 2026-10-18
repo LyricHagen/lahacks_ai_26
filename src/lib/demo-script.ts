@@ -8,7 +8,7 @@ import type { AskUrgency } from "./ask-state";
 export const DEMO_PERSONA_KEY = "newhire_backend";
 
 /** The shared demo account. `.invalid` is a reserved domain, so it can never be a real address. */
-export const DEMO_EMAIL = "demo@who2ask.invalid";
+export const DEMO_EMAIL = "demo@altostratus.invalid";
 
 /** How the narration refers to the demo persona (the owner chose he/him for Robert Barajas). */
 export const DEMO_PERSONA_PRONOUNS = { subject: "he", object: "him", possessive: "his" } as const;
@@ -19,7 +19,7 @@ export type DemoStepSlug = "ask" | "match" | "message" | "try";
 export type DemoStep = { slug: DemoStepSlug; title: string; short: string; line: string };
 
 export const DEMO_STEPS: DemoStep[] = [
-  { slug: "ask", title: "Describe the problem", short: "Ask", line: "Type it in plain words. Who2Ask reads it and checks the docs first." },
+  { slug: "ask", title: "Describe the problem", short: "Ask", line: "Type it in plain words. Altostratus reads it and checks the docs first." },
   { slug: "match", title: "Find the right person", short: "Match", line: "Ranked from evidence, skipping anyone already overloaded." },
   { slug: "message", title: "Send the message", short: "Message", line: "A ready draft. You send it yourself, and their weekly count goes up." },
   { slug: "try", title: "Try your own", short: "Your turn", line: "Ask anything and watch the same steps run." },

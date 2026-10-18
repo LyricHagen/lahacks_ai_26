@@ -3,9 +3,10 @@ import "server-only";
 // (a "use server" file may only export async functions). Every outcome logs one decision line.
 
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { AuthError } from "next-auth";
 import { cookies } from "next/headers";
-import { q } from "@/db";
+import { getDb, q, qIn } from "@/db";
 import * as t from "@/db/schema";
 import { createAccount, normalizeEmail, setUserStatus } from "./accounts";
 import { getSessionUser, requireAdmin } from "./auth";
@@ -77,6 +78,36 @@ export const logoutAction = withAction("auth.logout", async () => {
   const user = await getSessionUser();
   await signOut({ redirect: false });
   log.info(`auth decision: signed out ${user?.id ?? "(no session)"}`, { userId: user?.id ?? null });
+  return { to: "/" };
+});
+
+const DeleteAccountInput = z.object({ confirm: z.literal("delete") });
+
+/**
+ * Deletes the signed-in account and everything tied to it (the promise in /privacy): profile,
+ * asks with their events, candidates, drafts and doc checks, ramp plans, dismissals and usage
+ * rows. Most of it cascades from the users row; owner-keyed ramp rows are deleted by owner.
+ * The shared demo account cannot be deleted (Reset demo clears it instead).
+ */
+export const deleteAccountAction = withAction("auth.delete_account", async (input: unknown) => {
+  const parsed = DeleteAccountInput.safeParse(input);
+  if (!parsed.success) throw new AppError("BAD_REQUEST", 'Type "delete" to confirm.', { status: 400 });
+  const user = await getSessionUser();
+  if (!user) throw new AppError("AUTH_REQUIRED", undefined, { status: 401 });
+  if (user.isDemo) {
+    log.info(`auth decision: DENY delete account for ${user.id} (shared demo account; Reset demo clears it)`);
+    throw new AppError("FORBIDDEN", "The shared demo account cannot be deleted. Use Reset demo instead.", { status: 403 });
+  }
+  const counts = await getDb().transaction(async (tx) => {
+    const dismissals = await qIn(tx, "account.delete.dismissals", (h) => h.delete(t.rampDismissals).where(eq(t.rampDismissals.owner, user.id)).returning({ id: t.rampDismissals.id }));
+    const plans = await qIn(tx, "account.delete.ramp", (h) => h.delete(t.rampPlans).where(eq(t.rampPlans.owner, user.id)).returning({ id: t.rampPlans.id }));
+    const asks = await qIn(tx, "account.delete.asks", (h) => h.delete(t.asks).where(eq(t.asks.userId, user.id)).returning({ id: t.asks.id }));
+    const usage = await qIn(tx, "account.delete.usage", (h) => h.delete(t.usageLog).where(eq(t.usageLog.userId, user.id)).returning({ id: t.usageLog.id }));
+    await qIn(tx, "account.delete.user", (h) => h.delete(t.users).where(eq(t.users.id, user.id)));
+    return { asks: asks.length, rampPlans: plans.length, dismissals: dismissals.length, usageRows: usage.length };
+  });
+  await signOut({ redirect: false });
+  log.info(`account deleted: ${user.id} and ${counts.asks} asks, ${counts.rampPlans} ramp plans, ${counts.dismissals} dismissals, ${counts.usageRows} usage rows; signed out`, { userId: user.id, ...counts });
   return { to: "/" };
 });
 

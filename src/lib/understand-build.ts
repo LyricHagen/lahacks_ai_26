@@ -7,7 +7,7 @@ import { q } from "@/db";
 import * as t from "@/db/schema";
 import { EMBEDDING_MODEL } from "./embed";
 import { createLogger, markSensitive } from "./log";
-import { type Catalog, type ModelUnderstand, matchServices, matchSkills, type NamedRef, type Understanding, type UnderstandVia } from "./understanding";
+import { type Catalog, type ModelUnderstand, matchServices, matchSkills, type NamedRef, type ParseInfo, type Understanding, type UnderstandVia } from "./understanding";
 
 const log = createLogger("ask.understand");
 
@@ -49,6 +49,7 @@ export function buildUnderstanding(args: {
   via: UnderstandVia;
   note: string | null;
   askUrgency: string;
+  parse?: ParseInfo;
 }): Understanding {
   const { label, text, catalog, output, via } = args;
   const services = resolveIds(label, "service", output.serviceIds, catalog.services, via);
@@ -86,5 +87,6 @@ export function buildUnderstanding(args: {
     embeddingModel: EMBEDDING_MODEL,
     editedByUser: false,
     edits: [],
+    ...(args.parse ? { parse: args.parse } : {}),
   };
 }

@@ -65,7 +65,37 @@ export async function apiFetch<T = Record<string, unknown>>(url: string, init?: 
 }
 
 /** Call a server action wrapped with withAction, ingesting its `_debug` lines. */
-export async function runAction<I, O>(
+/**
+ * Identical calls still in flight, by action name and input. A double click (or a second tab
+ * click before the button disables) gets the first call's promise instead of a second request,
+ * so every action is idempotent against double submits without each form doing it by hand.
+ */
+const inflight = new Map<string, Promise<unknown>>();
+
+export function runAction<I, O>(
+  name: string,
+  action: (input: I) => Promise<
+    { ok: true; data: O; reqId: string; _debug?: string[] } | { ok: false; code: ErrorCode; message: string; reqId: string; _debug?: string[] }
+  >,
+  input: I,
+): Promise<O> {
+  let key: string;
+  try {
+    key = `${name}:${JSON.stringify(input) ?? ""}`;
+  } catch {
+    key = `${name}:${Math.random()}`;
+  }
+  const running = inflight.get(key);
+  if (running) {
+    log.info(`action ${name} already in flight with the same input, joining it (double submit ignored)`);
+    return running as Promise<O>;
+  }
+  const p = runActionOnce(name, action, input).finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
+async function runActionOnce<I, O>(
   name: string,
   action: (input: I) => Promise<
     { ok: true; data: O; reqId: string; _debug?: string[] } | { ok: false; code: ErrorCode; message: string; reqId: string; _debug?: string[] }

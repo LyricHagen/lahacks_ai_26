@@ -1,9 +1,11 @@
 import "server-only";
 // Daily token budgets for live model calls, from env vars. A day is the UTC calendar day.
 // Tokens are input plus output tokens of live calls in usage_log (fallbacks record zero).
+// Rows from owner scripts (user_id null: the eval, fixtures:record, train:generate) do not count:
+// those scripts cap their own spend with --max-usd, and an eval run must never starve the live app.
 
 import { wallNow } from "@/lib/clock";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { q } from "@/db";
 import * as t from "@/db/schema";
 import { createLogger } from "./log";
@@ -53,7 +55,7 @@ export async function getBudgetState(userId: string | null): Promise<BudgetState
           : sql<null>`null`,
       })
       .from(t.usageLog)
-      .where(and(gte(t.usageLog.createdAt, day), eq(t.usageLog.outcome, "live"))),
+      .where(and(gte(t.usageLog.createdAt, day), eq(t.usageLog.outcome, "live"), isNotNull(t.usageLog.userId))),
   );
   return {
     dayStart: day.toISOString(),

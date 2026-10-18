@@ -7,13 +7,19 @@ import "server-only";
 //   if (r.source === "fixture") ...   // committed demo result; show r.note
 //   if (r.source === "none") ...      // no live result allowed and no fixture; show r.code
 //
-// Checks, in order, each logged as "gate N/5 <check>: pass|FAIL ...":
-//   1 mode is live   2 user is approved   3 user under daily token budget
-//   4 global daily budget not exhausted   5 provider key exists
+// Checks, in order, each logged as "gate N/6 <check>: pass|FAIL ...":
+//   1 mode is live   2 user is approved   3 under the live call rate limit (per account and per IP)
+//   4 user under daily token budget   5 global daily budget not exhausted   6 provider key exists
 // Any failure (and any provider error) falls back to a demo result instead of throwing: first the
 // recorded live result for this exact input (fixtures/model/, "fixture HIT"), else the purpose's
 // deterministic demo result ("fixture MISS ... hash=..."). Every call writes exactly one
 // usage_log row, whatever the outcome.
+//
+// Tiers: a purpose may list a chain of providers (spec.tiers), tried in order after the checks
+// pass. understand_ask is: the fine-tuned small model on Veri (finetune), then the frontier model
+// (frontier), then the deterministic demo result as always. Each failed or timed out tier is logged
+// ("tier 1/2 finetune FAILED ... falling to tier 2 frontier"), and the usage row says which tier
+// served and why (usage_log.tier, tier_note). The eval forces one tier with args.tier.
 //
 // Scripts run by the owner (pnpm fixtures:record) wrap their work in runAsScript: inside it the
 // gate sees the script actor instead of the session user, and every live answer is handed to the
@@ -30,7 +36,10 @@ import { createLogger, currentReqId } from "./log";
 import { hasProviderKey, MODE_REASON_LABEL, type Mode, type ResolvedMode } from "./mode";
 import { type FixtureKey, fixtureKey, fromPlaceholders, isRecordedPurpose, lookupRecorded, normalizeForKey, toPlaceholders } from "./model-fixtures";
 import { estimateCostUsd, type ModelUsage, trackModelCall } from "./model-log";
+import { type VeriConfig, veriChat } from "./model-veri";
 import { PURPOSES, type PurposeName } from "./model-purposes";
+import { span, spanAttr } from "./observe";
+import { clientIp, countAttempt } from "./rate-limit";
 
 const log = createLogger("model.gate");
 
@@ -44,7 +53,17 @@ export type ModelRequest = {
   /** JSON schema for structured output. The parsed text is passed to parse(). */
   jsonSchema?: Record<string, unknown>;
   timeoutMs?: number;
+  /** Put the system prompt in the provider's prompt cache (it must be the same for every call). */
+  cacheSystem?: boolean;
+  /** Who serves it. Default anthropic. */
+  provider?: "anthropic" | "veri";
+  /** Deployment and model name, for provider veri. */
+  veri?: VeriConfig;
 };
+
+/** Which link of a purpose's chain served a call. "frontier" is spec.request(). */
+export type TierName = "finetune" | "base" | "frontier" | "sonnet";
+export type TierRequest = { tier: TierName; req: ModelRequest | null; /** why req is null */ unavailable?: string; /** false: only when forced (the eval's base model) */ chain: boolean };
 
 /** One kind of model call. Registered in src/lib/model-purposes.ts. */
 export type PurposeSpec<I, O> = {
@@ -60,6 +79,8 @@ export type PurposeSpec<I, O> = {
    * owner). Hashed by fixtureHash (src/lib/model-fixtures.ts). Absent: the purpose is never recorded.
    */
   key?(input: I): unknown;
+  /** Providers tried before spec.request() (the frontier tier), in order. */
+  tiers?(input: I): TierRequest[];
 };
 
 type SpecOf<P extends PurposeName> = (typeof PURPOSES)[P];
@@ -70,7 +91,7 @@ export type PurposeOutput<P extends PurposeName> = SpecOf<P> extends PurposeSpec
 export type ScriptActor = { kind: "script"; name: string };
 
 /** A live answer handed to the recording script (pnpm fixtures:record). */
-export type LiveRecord = { purpose: string; hash: string; label: string; input: unknown; output: unknown; model: string; usage: ModelUsage };
+export type LiveRecord = { purpose: string; hash: string; label: string; input: unknown; output: unknown; model: string; usage: ModelUsage; tier: TierName; ms: number };
 
 export type ScriptRun = {
   actor: ScriptActor;
@@ -92,16 +113,17 @@ export function runAsScript<T>(run: ScriptRun, fn: () => Promise<T>): Promise<T>
 /** Where a demo result came from: a recorded live answer, or the purpose's deterministic builder. */
 export type FixtureKind = "recorded" | "deterministic";
 
-export type GateOutcome = "live" | "mode_demo" | "not_approved" | "user_budget" | "global_budget" | "no_api_key" | "provider_error";
+export type GateOutcome = "live" | "mode_demo" | "not_approved" | "rate_limited" | "user_budget" | "global_budget" | "no_api_key" | "provider_error";
 
 export type ModelResult<O> =
-  | { source: "live"; output: O; outcome: "live"; model: string; usage: ModelUsage; costUsd: number | null; ms: number }
-  | { source: "fixture"; output: O; outcome: Exclude<GateOutcome, "live">; note: string; fixture: { kind: FixtureKind; hash: string | null } }
+  | { source: "live"; output: O; outcome: "live"; model: string; usage: ModelUsage; costUsd: number | null; ms: number; tier: TierName; provider: string; tierNote: string }
+  | { source: "fixture"; output: O; outcome: Exclude<GateOutcome, "live">; note: string; fixture: { kind: FixtureKind; hash: string | null; /** the live call the recording came from */ recorded?: { tier: TierName; ms: number; model: string } } }
   | { source: "none"; output: null; outcome: Exclude<GateOutcome, "live">; note: string; code: ErrorCode };
 
 const OUTCOME_NOTE: Record<Exclude<GateOutcome, "live">, string> = {
   mode_demo: "demo mode",
   not_approved: "this account is not approved for live calls",
+  rate_limited: "too many live calls in the last hour",
   user_budget: "your daily token budget is used up",
   global_budget: "today's shared token budget is used up",
   no_api_key: "the server has no model key",
@@ -114,14 +136,33 @@ function provider(): Anthropic {
   return (client ??= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 1 }));
 }
 
-export async function callModel<P extends PurposeName>(args: {
+type CallArgs<P extends PurposeName> = {
   purpose: P;
   input: PurposeInput<P>;
   user: SessionUser | ScriptActor | null;
   mode: ResolvedMode | Mode;
   /** Ask this call belongs to, for the usage row. */
   askId?: string;
-}): Promise<ModelResult<PurposeOutput<P>>> {
+  /** Force one tier only (the eval). Default: the purpose's chain, then the frontier. */
+  tier?: TierName;
+};
+
+/** The gate, inside one Sentry span per call (op ai.model) tagged with the source and the tier that served. */
+export async function callModel<P extends PurposeName>(args: CallArgs<P>): Promise<ModelResult<PurposeOutput<P>>> {
+  const mode = typeof args.mode === "string" ? args.mode : args.mode.mode;
+  return span(`model.${args.purpose}`, "ai.model", { purpose: args.purpose, mode, ask_id: args.askId, forced_tier: args.tier }, async () => {
+    const r = await gate(args);
+    spanAttr("model.source", r.source);
+    if (r.source === "live") {
+      spanAttr("model.tier", r.tier);
+      spanAttr("model.name", r.model);
+      spanAttr("model.ms", r.ms);
+    } else if (r.source === "fixture") spanAttr("model.outcome", r.outcome);
+    return r;
+  });
+}
+
+async function gate<P extends PurposeName>(args: CallArgs<P>): Promise<ModelResult<PurposeOutput<P>>> {
   const spec = PURPOSES[args.purpose] as unknown as PurposeSpec<PurposeInput<P>, PurposeOutput<P>>;
   const mode: Mode = typeof args.mode === "string" ? args.mode : args.mode.mode;
   const run = scriptRuns.getStore();
@@ -146,59 +187,109 @@ export async function callModel<P extends PurposeName>(args: {
     if (rec) {
       log.branch(`serve recorded answer for ${label} without a live call`, `the script asked for recorded answers first and hash=${hash} is recorded`);
       run.onFixture?.({ purpose: args.purpose, kind: "recorded", hash: keyHash(), askIds: fixKey()?.askIds ?? [], output: rec });
-      await writeUsage({ outcome: "mode_demo", demo: true, usage: { inputTokens: 0, outputTokens: 0 }, ms: Math.round(performance.now() - t0), costUsd: 0, errorCode: null, model: req.model });
-      return { source: "fixture", output: rec, outcome: "mode_demo", note: "Cached demo result: recorded earlier.", fixture: { kind: "recorded", hash: keyHash() } };
+      await writeUsage({ outcome: "mode_demo", demo: true, usage: { inputTokens: 0, outputTokens: 0 }, ms: Math.round(performance.now() - t0), costUsd: 0, errorCode: null, model: req.model, provider: "fixture", tier: "fixture", tierNote: "recorded answer served to a script" });
+      return { source: "fixture", output: rec, outcome: "mode_demo", note: "Cached demo result: recorded earlier.", fixture: { kind: "recorded", hash: keyHash(), recorded: recordedMeta() } };
     }
   }
 
   const outcome = await runChecks();
   if (outcome !== "live") return fallback(outcome);
 
-  // All five checks passed: spend.
-  let usage: ModelUsage = { inputTokens: 0, outputTokens: 0 };
-  let rawText = "";
-  try {
-    const output = await trackModelCall(args.purpose, req.model, async () => {
-      const r = await provider().messages.create(
-        {
-          model: req.model,
-          max_tokens: req.maxTokens,
-          system: req.system,
-          messages: [{ role: "user", content: req.prompt }],
-          ...(req.effort || req.jsonSchema
-            ? { output_config: { ...(req.effort ? { effort: req.effort } : {}), ...(req.jsonSchema ? { format: { type: "json_schema" as const, schema: req.jsonSchema } } : {}) } }
-            : {}),
-        },
-        req.timeoutMs ? { timeout: req.timeoutMs } : undefined,
-      );
-      usage = { inputTokens: r.usage.input_tokens, outputTokens: r.usage.output_tokens };
-      if (r.stop_reason === "refusal") throw new Error(`model refused (stop_reason refusal, category ${r.stop_details?.category ?? "none"})`);
-      if (r.stop_reason === "max_tokens") log.warn(`${label} hit max_tokens (${req.maxTokens}); output may be cut off`);
-      const text = r.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
-      rawText = text;
-      return { result: spec.parse(text, args.input), usage };
-    });
-    const ms = Math.round(performance.now() - t0);
-    const costUsd = estimateCostUsd(req.model, usage);
-    await writeUsage({ outcome: "live", demo: false, usage, ms, costUsd, errorCode: null, model: req.model });
-    log.info(`call ${label} answered live in ${ms}ms`, { tokens: usage.inputTokens + usage.outputTokens, costUsd });
-    if (run?.record && keyHash() && isRecordedPurpose(args.purpose)) {
-      // The model's own JSON, as it came back: replay runs it through the same parse() as a live answer.
-      run.record({ purpose: args.purpose, hash: keyHash()!, label, input: spec.key!(args.input), output: toPlaceholders(asJson(rawText), fixKey()!.askIds), model: req.model, usage });
-      log.info(`recorded ${label} as hash=${hash}`, { purpose: args.purpose });
+  // All six checks passed: spend, tier by tier.
+  const tiers = chain();
+  const notes: string[] = [];
+  let failedCost = 0;
+  let lastCode: ErrorCode = "MODEL_CALL_FAILED";
+  let spentTotal: ModelUsage = { inputTokens: 0, outputTokens: 0 };
+  for (const [i, t] of tiers.entries()) {
+    const at = `tier ${i + 1}/${tiers.length} ${t.tier}`;
+    if (!t.req) {
+      log.skip(`${at} for ${label}`, t.unavailable ?? "not configured");
+      notes.push(`${t.tier} skipped (${t.unavailable ?? "not configured"})`);
+      continue;
     }
-    return { source: "live", output, outcome: "live", model: req.model, usage, costUsd, ms };
-  } catch (err) {
-    const e = toAppError(err, "MODEL_CALL_FAILED");
-    const code: ErrorCode = e.code === "UNKNOWN" ? "MODEL_CALL_FAILED" : e.code;
-    log.error(`call ${label} failed live with ${code}, falling back to the demo fixture`, { err });
-    return fallback("provider_error", usage, code);
+    const tr = t.req;
+    const prov = tr.provider ?? "anthropic";
+    const t1 = performance.now();
+    let usage: ModelUsage = { inputTokens: 0, outputTokens: 0 };
+    let rawText = "";
+    try {
+      const output = await trackModelCall(args.purpose, tr.model, async () => {
+        if (prov === "veri") {
+          const r = await veriChat({ config: tr.veri!, messages: [{ role: "system", content: tr.system }, { role: "user", content: tr.prompt }], maxTokens: tr.maxTokens, timeoutMs: tr.timeoutMs ?? 2500 });
+          usage = r.usage;
+          rawText = r.text;
+          return { result: spec.parse(r.text, args.input), usage };
+        }
+        const r = await provider().messages.create(
+          {
+            model: tr.model,
+            max_tokens: tr.maxTokens,
+            system: tr.cacheSystem ? [{ type: "text" as const, text: tr.system, cache_control: { type: "ephemeral" as const } }] : tr.system,
+            messages: [{ role: "user", content: tr.prompt }],
+            ...(tr.effort || tr.jsonSchema
+              ? { output_config: { ...(tr.effort ? { effort: tr.effort } : {}), ...(tr.jsonSchema ? { format: { type: "json_schema" as const, schema: tr.jsonSchema } } : {}) } }
+              : {}),
+          },
+          tr.timeoutMs ? { timeout: tr.timeoutMs } : undefined,
+        );
+        // Cache reads and writes are billed apart from input_tokens; fold them in at their price ratios
+        // (read 0.1x, write 1.25x) so cost estimates and budgets stay honest.
+        const cached = (r.usage.cache_read_input_tokens ?? 0) * 0.1 + (r.usage.cache_creation_input_tokens ?? 0) * 1.25;
+        usage = { inputTokens: r.usage.input_tokens + Math.round(cached), outputTokens: r.usage.output_tokens };
+        if (r.stop_reason === "refusal") throw new Error(`model refused (stop_reason refusal, category ${r.stop_details?.category ?? "none"})`);
+        if (r.stop_reason === "max_tokens") log.warn(`${label} hit max_tokens (${tr.maxTokens}); output may be cut off`);
+        const text = r.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
+        rawText = text;
+        return { result: spec.parse(text, args.input), usage };
+      });
+      const tierMs = Math.round(performance.now() - t1);
+      const ms = Math.round(performance.now() - t0);
+      const costUsd = (estimateCostUsd(tr.model, usage, tierMs) ?? 0) + failedCost;
+      const tierNote = [...notes, `${t.tier} served in ${tierMs}ms`].join("; ");
+      spentTotal = { inputTokens: spentTotal.inputTokens + usage.inputTokens, outputTokens: spentTotal.outputTokens + usage.outputTokens };
+      await writeUsage({ outcome: "live", demo: false, usage: spentTotal, ms, costUsd, errorCode: null, model: tr.model, provider: prov, tier: t.tier, tierNote });
+      log.info(`call ${label} answered live by ${at} (${prov}:${tr.model}) in ${tierMs}ms`, { tokens: usage.inputTokens + usage.outputTokens, costUsd, tierNote });
+      if (run?.record && keyHash() && isRecordedPurpose(args.purpose)) {
+        // The model's own JSON, as it came back: replay runs it through the same parse() as a live answer.
+        run.record({ purpose: args.purpose, hash: keyHash()!, label, input: spec.key!(args.input), output: toPlaceholders(asJson(rawText), fixKey()!.askIds), model: tr.model, usage, tier: t.tier, ms: tierMs });
+        log.info(`recorded ${label} as hash=${hash} (${t.tier}, ${tierMs}ms)`, { purpose: args.purpose });
+      }
+      return { source: "live", output, outcome: "live", model: tr.model, usage, costUsd, ms: tierMs, tier: t.tier, provider: prov, tierNote };
+    } catch (err) {
+      const e = toAppError(err, "MODEL_CALL_FAILED");
+      const cause = (err as { cause?: unknown }).cause;
+      const inner = cause instanceof Error || (cause && typeof cause === "object") ? toAppError(cause, "MODEL_CALL_FAILED") : e;
+      lastCode = inner.code === "UNKNOWN" ? "MODEL_CALL_FAILED" : inner.code;
+      const tierMs = Math.round(performance.now() - t1);
+      failedCost += estimateCostUsd(tr.model, usage, tierMs) ?? 0;
+      spentTotal = { inputTokens: spentTotal.inputTokens + usage.inputTokens, outputTokens: spentTotal.outputTokens + usage.outputTokens };
+      notes.push(`${t.tier} failed with ${lastCode} after ${tierMs}ms (${inner.message.slice(0, 120)})`);
+      const next = tiers.slice(i + 1).find((x) => x.req);
+      if (next) log.warn(`${at} FAILED for ${label} with ${lastCode} after ${tierMs}ms (${inner.message.slice(0, 160)}), falling to tier ${tiers.indexOf(next) + 1}/${tiers.length} ${next.tier}`, { err });
+      else log.error(`call ${label} failed live with ${lastCode} on ${at}, falling back to the demo fixture`, { err });
+    }
+  }
+  return fallback("provider_error", spentTotal, lastCode, failedCost, notes.join("; ") || "no tier configured");
+
+  /** The tiers to try: the forced one, or the purpose's chain followed by the frontier request. */
+  function chain(): TierRequest[] {
+    const listed = spec.tiers?.(args.input) ?? [];
+    const all: TierRequest[] = [...listed, { tier: "frontier", req, chain: true }];
+    if (args.tier) {
+      const forced = all.find((t) => t.tier === args.tier);
+      log.branch(`${label} forced to tier ${args.tier}`, "the caller asked for one tier only (eval)");
+      return forced ? [forced] : [{ tier: args.tier, req: null, unavailable: `purpose ${args.purpose} has no ${args.tier} tier`, chain: false }];
+    }
+    const used = all.filter((t) => t.chain);
+    log.debug(`${label} tier chain: ${used.map((t) => `${t.tier}${t.req ? `=${t.req.provider ?? "anthropic"}:${t.req.model}` : ` (unavailable: ${t.unavailable})`}`).join(" -> ")} -> deterministic`);
+    return used;
   }
 
   async function runChecks(): Promise<GateOutcome> {
     const step = (n: number, name: string, pass: boolean, detail: string) => {
-      if (pass) log.debug(`gate ${n}/5 ${name}: pass (${detail})`);
-      else log.info(`gate ${n}/5 ${name}: FAIL (${detail}), using the demo fixture`);
+      if (pass) log.debug(`gate ${n}/6 ${name}: pass (${detail})`);
+      else log.info(`gate ${n}/6 ${name}: FAIL (${detail}), using the demo fixture`);
       return pass;
     };
     const resolvedReason = typeof args.mode === "string" ? "given as a string" : `resolveMode said ${args.mode.reason}`;
@@ -212,11 +303,22 @@ export async function callModel<P extends PurposeName>(args: {
       if (!step(2, "user is approved", !!u && u.status === "approved" && !u.isDemo, u ? `${u.id} status ${u.status}${u.isDemo ? ", shared demo account (never live)" : ""}` : "signed out")) return "not_approved";
     }
 
+    // Check 3: live calls per account and per network address in the last hour (rate_limits).
+    if (isScript) log.skip("gate 3/6 rate limit", "script actor runs from the command line, outside any request");
+    else {
+      const ip = await clientIp().catch(() => "unknown");
+      const byUser = await countAttempt("model_user", userId!);
+      const byIp = await countAttempt("model_ip", ip);
+      if (!step(3, "under the live call rate limit", byUser.allowed && byIp.allowed, `${userId} ${byUser.count} of ${byUser.limit}, ${ip} ${byIp.count} of ${byIp.limit} this hour`)) return "rate_limited";
+    }
+
     const budget = await getBudgetState(userId);
-    if (isScript) log.skip("gate 3/5 user budget", "script actor has no per-user budget; the global budget still applies");
-    else if (!step(3, "user under daily budget", (budget.userUsed ?? 0) < budget.userLimit, `${budget.userUsed ?? 0} of ${budget.userLimit} tokens today`)) return "user_budget";
-    if (!step(4, "global budget not exhausted", budget.globalUsed < budget.globalLimit, `${budget.globalUsed} of ${budget.globalLimit} tokens today`)) return "global_budget";
-    if (!step(5, "provider key exists", hasProviderKey(), hasProviderKey() ? "ANTHROPIC_API_KEY set" : "ANTHROPIC_API_KEY not set")) return "no_api_key";
+    if (isScript) log.skip("gate 4/6 user budget", "script actor has no per-user budget; the global budget still applies");
+    else if (!step(4, "user under daily budget", (budget.userUsed ?? 0) < budget.userLimit, `${budget.userUsed ?? 0} of ${budget.userLimit} tokens today`)) return "user_budget";
+    if (!step(5, "global budget not exhausted", budget.globalUsed < budget.globalLimit, `${budget.globalUsed} of ${budget.globalLimit} tokens today`)) return "global_budget";
+    const veriOnly = args.tier === "finetune" || args.tier === "base";
+    const keyOk = veriOnly ? !!process.env.VERI_API_KEY : hasProviderKey();
+    if (!step(6, "provider key exists", keyOk, veriOnly ? (keyOk ? "VERI_API_KEY set" : "VERI_API_KEY not set") : keyOk ? "ANTHROPIC_API_KEY set" : "ANTHROPIC_API_KEY not set")) return "no_api_key";
     return "live";
   }
 
@@ -234,7 +336,14 @@ export async function callModel<P extends PurposeName>(args: {
     }
   }
 
-  async function fallback(why: Exclude<GateOutcome, "live">, spent: ModelUsage = { inputTokens: 0, outputTokens: 0 }, errorCode: ErrorCode | null = null): Promise<ModelResult<PurposeOutput<P>>> {
+  /** Which live call a recorded answer came from, so demo mode can show its real latency. */
+  function recordedMeta(): { tier: TierName; ms: number; model: string } | undefined {
+    const h = keyHash();
+    const rec = h ? lookupRecorded(args.purpose, h) : null;
+    return rec?.ms !== undefined ? { tier: (rec.tier as TierName) ?? "frontier", ms: rec.ms, model: rec.model } : undefined;
+  }
+
+  async function fallback(why: Exclude<GateOutcome, "live">, spent: ModelUsage = { inputTokens: 0, outputTokens: 0 }, errorCode: ErrorCode | null = null, spentUsd = 0, tierNote: string | null = null): Promise<ModelResult<PurposeOutput<P>>> {
     const ms = Math.round(performance.now() - t0);
     const h = keyHash();
     const rec = recorded();
@@ -247,20 +356,21 @@ export async function callModel<P extends PurposeName>(args: {
     }
     const fixture = rec ?? spec.fixture(args.input);
     // A failed live call can still have consumed tokens (bad JSON, refusal); record and price them.
-    const costUsd = spent.inputTokens || spent.outputTokens ? estimateCostUsd(req.model, spent) : 0;
-    await writeUsage({ outcome: why, demo: true, usage: spent, ms, costUsd, errorCode: fixture ? errorCode : (errorCode ?? "MODEL_FIXTURE_MISSING"), model: req.model });
+    const costUsd = spentUsd || (spent.inputTokens || spent.outputTokens ? estimateCostUsd(req.model, spent) : 0);
+    const servedBy = `deterministic${rec ? " (recorded)" : ""}`;
+    await writeUsage({ outcome: why, demo: true, usage: spent, ms, costUsd, errorCode: fixture ? errorCode : (errorCode ?? "MODEL_FIXTURE_MISSING"), model: req.model, provider: "fixture", tier: rec ? "recorded" : "deterministic", tierNote: tierNote ? `${tierNote}; ${servedBy} served` : `${OUTCOME_NOTE[why]}; ${servedBy} served` });
     const modeWhy = why === "mode_demo" && typeof args.mode !== "string" ? ` (${MODE_REASON_LABEL[args.mode.reason]})` : "";
     const note = `Cached demo result: ${OUTCOME_NOTE[why]}${modeWhy}.`;
     if (fixture) {
       log.branch(`serve ${kind} demo result for ${label}`, OUTCOME_NOTE[why], { outcome: why, hash: h });
       run?.onFixture?.({ purpose: args.purpose, kind, hash: h, askIds: fixKey()?.askIds ?? [], output: fixture });
-      return { source: "fixture", output: fixture, outcome: why, note, fixture: { kind, hash: h } };
+      return { source: "fixture", output: fixture, outcome: why, note, fixture: { kind, hash: h, recorded: rec ? recordedMeta() : undefined } };
     }
     log.warn(`no demo fixture for ${label}, caller must show an empty or error state`, { outcome: why, code: "MODEL_FIXTURE_MISSING" });
     return { source: "none", output: null, outcome: why, note: `No result: ${OUTCOME_NOTE[why]} and no cached demo result exists.`, code: "MODEL_FIXTURE_MISSING" };
   }
 
-  async function writeUsage(row: { outcome: GateOutcome; demo: boolean; usage: ModelUsage; ms: number; costUsd: number | null; errorCode: ErrorCode | null; model: string }) {
+  async function writeUsage(row: { outcome: GateOutcome; demo: boolean; usage: ModelUsage; ms: number; costUsd: number | null; errorCode: ErrorCode | null; model: string; provider: string; tier: string; tierNote: string }) {
     try {
       await q("model.usage.insert", (db) =>
         db.insert(t.usageLog).values({
@@ -275,6 +385,9 @@ export async function callModel<P extends PurposeName>(args: {
           mode,
           outcome: row.outcome,
           errorCode: row.errorCode,
+          provider: row.provider,
+          tier: row.tier,
+          tierNote: row.tierNote.slice(0, 500),
           askId: args.askId ?? null,
           reqId: currentReqId(),
         }),

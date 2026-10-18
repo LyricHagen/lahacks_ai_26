@@ -38,7 +38,7 @@ export const ASK_STATE_DEFS: Record<AskState, AskStateDef> = {
   confirming: {
     label: "Confirm",
     phase: "review",
-    description: "Check what Who2Ask understood, fix it if needed, and see whether a document already answers it.",
+    description: "Check what Altostratus understood, fix it if needed, and see whether a document already answers it.",
     builtInPrompt: 5,
     terminal: false,
   },

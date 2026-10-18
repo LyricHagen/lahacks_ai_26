@@ -74,7 +74,7 @@ export function DemoSendPanel(p: SendPanelProps) {
           {atLimit ? `: at their weekly limit, so the next ask about ${p.serviceName} routes around them, the same way this one routed around the primary owner.` : "."}
         </p>
       ) : (
-        <p className="text-sm text-muted">Nothing changes until you say you sent it. Who2Ask has no send button: you copy the draft and send it from your own Slack.</p>
+        <p className="text-sm text-muted">Nothing changes until you say you sent it. Altostratus has no send button: you copy the draft and send it from your own Slack.</p>
       )}
       <div className="flex flex-wrap items-center gap-3">
         {!result && p.canSend ? (

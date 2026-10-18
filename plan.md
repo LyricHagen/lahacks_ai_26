@@ -22,7 +22,7 @@
 1. **Subtext**: jargon subtitles for your first weeks at work, shown in Even G2 glasses (Even Realities $3.8k + Workday + Veri + Beyond the Digital). It has the most prize money per competitor, but it needs the loaner glasses.
 2. **Plus One**: the friend in your group chat who actually makes plans happen (Photon + CREAO Team Empowerment + Fetch + Browser Use + Visa).
 3. **Headroom**: a business card that knows if you can afford it *before* you swipe (Visa + QuickBooks + Veri + Tiger Data).
-4. **Who2Ask**: a new-hire agent that finds the right person and drafts the ask (Workday-centric).
+4. **Altostratus**: a new-hire agent that finds the right person and drafts the ask (Workday-centric).
 
 ---
 
@@ -83,7 +83,7 @@ All scored 1–5. **Clarity** = the 5-second test. **Novelty** = how unlike a co
 | 2 | **Subtext**: jargon subtitles in your glasses for your first weeks at work | 5 | 5 | 5 | 4 (≈13) | ⭐ Runner-up (needs a G2 loaner) |
 | 3 | **Plus One**: the friend in the group chat who actually books the plan | 5 | 3 | 5 | 4 (≈13) | ⭐ Alt |
 | 4 | **Headroom**: a card that knows if your business can afford it before you swipe | 4 | 4 | 3 | 4 (≈13) | ⭐ Alt (best eval story) |
-| 5 | **Who2Ask**: tells a new hire exactly who to ask and drafts the message | 4 | 3 | 3 | 3 (≈10) | Alt (Workday-only depth) |
+| 5 | **Altostratus**: tells a new hire exactly who to ask and drafts the message | 4 | 3 | 3 | 3 (≈10) | Alt (Workday-only depth) |
 | 6 | Price-drop refunder: gets your money back when prices drop after you buy | 5 | 2 | 3 | 3 | Paribus / Capital One Shopping already exist. Fold into Lowball v2. |
 | 7 | Bill negotiator: calls Comcast and gets your bill lowered | 5 | 2 | 4 | 3 | Rocket Money / Trim do it. **Fold into Lowball as "Lowball your bills" in the pitch.** |
 | 8 | Snap-your-fridge: photo, then meal plan, then groceries ordered | 5 | 2 | 3 | 4 | Crowded. Weak novelty. |
@@ -501,9 +501,9 @@ Judges scan a QR code that adds them to a live iMessage group with Plus One. Som
 
 ---
 
-## 7. ALT: **Who2Ask**, new-hire "who do I ask?" agent (Workday-focused)
+## 7. ALT: **Altostratus**, new-hire "who do I ask?" agent (Workday-focused)
 
-**Pitch:** "New at work and stuck? Tell Who2Ask your problem. It finds the right person, checks if they're free, and drafts the perfect ask. You hit send."
+**Pitch:** "New at work and stuck? Tell Altostratus your problem. It finds the right person, checks if they're free, and drafts the perfect ask. You hit send."
 
 **Flow:**
 1. **Synthetic "Acme Corp"** with ~200 employees (using Workday's suggested fields: department, job title, skills, mentor profiles, open projects, onboarding tasks).

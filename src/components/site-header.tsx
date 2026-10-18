@@ -64,9 +64,9 @@ export function SiteHeader({ session }: { session: HeaderSession }) {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-bg">
       <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 h-14">
-        <Link href="/" className="flex items-center gap-2 no-underline shrink-0" aria-label="Who2Ask home">
-          <Image src="/logo.png" alt="" width={28} height={28} priority className="border border-line" />
-          <span className="font-semibold tracking-tight">Who2Ask</span>
+        <Link href="/" className="flex items-center gap-2 no-underline shrink-0" aria-label="Altostratus home">
+          <Image src="/logo.png" alt="" width={36} height={24} priority className="h-6 w-9 object-contain" />
+          <span className="font-semibold tracking-tight">Altostratus</span>
         </Link>
         <nav aria-label="Main" className="flex-1 min-w-0 overflow-x-auto">
           <ul className="flex items-center gap-0.5">

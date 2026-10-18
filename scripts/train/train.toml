@@ -1,0 +1,32 @@
+# LoRA SFT of Qwen2.5-1.5B-Instruct on the understand_ask set, on one Veri L4.
+# Launch with scripts/train/launch.sh (uploads the data, prints balance and estimate, submits only with --yes).
+kind = "train"
+
+[job]
+output_model = "altostratus-understand-v1"
+
+[model]
+base = "Qwen/Qwen2.5-1.5B-Instruct"
+
+[dataset]
+id = "altostratus-understand-train@latest"   # launch.sh appends data/understand/veri_train.jsonl to this stream
+
+[method]
+type = "sft_text"
+learning_rate = 2e-4               # LoRA wants about 10x the full fine-tune rate
+num_epochs = 2
+max_seq_length = 2048              # prompt (catalog) is about 1,100 tokens, answer about 150
+lora_rank = 16                     # under the serving fleet's max_lora_rank (64)
+lora_alpha = 32
+micro_batch_size = 4
+gradient_accumulation_steps = 4
+
+[resources]
+gpu_type = "L4-24GB"
+gpu_count = 1
+
+[provider]
+name = "aws"
+
+[checkpoint]
+destination = "veri"

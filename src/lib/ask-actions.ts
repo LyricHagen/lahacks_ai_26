@@ -15,12 +15,16 @@ import { AppError } from "./errors";
 import { createLogger } from "./log";
 import { enforceRateLimit } from "./rate-limit";
 import { withAction } from "./request-context";
-import type { Viewer } from "./viewer";
+import { getViewer, type Viewer } from "./viewer";
 
 const log = createLogger("ask.action");
 
 export const createAskAction = withAction("ask.create", async (input: NewAskInput) => {
   await enforceRateLimit("ask");
+  const viewer = await getViewer();
+  const owner = viewer.user?.id ?? viewer.visitorId;
+  if (owner) await enforceRateLimit("ask_owner", owner);
+  else log.skip("ask_owner rate limit", "first ask from a signed-out visitor without the cookie yet; the per-IP limit applies");
   return createAndSubmitAsk(input);
 });
 

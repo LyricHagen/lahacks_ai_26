@@ -10,7 +10,10 @@ import "server-only";
 import { headers } from "next/headers";
 import { unstable_rethrow } from "next/navigation";
 import { NextResponse, type NextRequest } from "next/server";
+import type { z } from "zod";
 import { AppError, type ErrorCode, toAppError } from "./errors";
+import { ActionInputs } from "./inputs";
+import { reportError } from "./observe";
 import { createLogger, currentRequest, requestStorage, type RequestStore } from "./log";
 import { shortId } from "./log-format";
 import { getSessionUser } from "./auth";
@@ -102,6 +105,7 @@ export function withRoute<P = Record<string, string>>(
         const appErr = toAppError(err);
         errorCode = appErr.code;
         rlog.error(`failed with ${appErr.code}`, { err, status: appErr.status });
+        if (appErr.status >= 500) reportError(err, { reqId, where: `api.${name}`, code: appErr.code });
         result = {
           status: appErr.status,
           body: { ok: false, error: { code: appErr.code, message: appErr.message } },
@@ -124,6 +128,22 @@ export function withRoute<P = Record<string, string>>(
   };
 }
 
+/** Validate route params (already awaited) against a schema from src/lib/inputs.ts; BAD_REQUEST on failure. */
+export function parseParams<T>(schema: z.ZodType<T>, params: unknown, what: string): T {
+  const r = schema.safeParse(params);
+  if (r.success) return r.data;
+  createLogger("api.input").warn(`${what}: params refused by schema: ${r.error.issues.map((i) => `${i.path.join(".")} ${i.code}`).join(", ")}`);
+  throw new AppError("BAD_REQUEST", "That address is not in the expected shape.", { status: 400 });
+}
+
+/** Validate a request's query string against a schema from src/lib/inputs.ts; BAD_REQUEST on failure. */
+export function parseQuery<T>(schema: z.ZodType<T>, req: NextRequest, what: string): T {
+  const r = schema.safeParse(Object.fromEntries(req.nextUrl.searchParams));
+  if (r.success) return r.data;
+  createLogger("api.input").warn(`${what}: query refused by schema: ${r.error.issues.map((i) => `${i.path.join(".")} ${i.code}`).join(", ")}`);
+  throw new AppError("BAD_REQUEST", "That query is not in the expected shape.", { status: 400 });
+}
+
 // ---------------------------------------------------------------------------
 // Server actions
 // ---------------------------------------------------------------------------
@@ -132,9 +152,14 @@ export type ActionResult<T> =
   | { ok: true; data: T; reqId: string; _debug?: string[] }
   | { ok: false; code: ErrorCode; message: string; reqId: string; _debug?: string[] };
 
-/** Wrap a server action. Never throws to the client: failures come back as { ok: false, code }. */
+/**
+ * Wrap a server action. Never throws to the client: failures come back as { ok: false, code }.
+ * The input is checked against ActionInputs[name] (src/lib/inputs.ts) before fn runs; an action
+ * with no schema there is refused, so every action input is validated.
+ */
 export function withAction<I, O>(name: string, fn: (input: I) => Promise<O>) {
   const alog = createLogger(`action.${name}`);
+  const schema = (ActionInputs as Record<string, z.ZodType | undefined>)[name];
   return async (input: I): Promise<ActionResult<O>> => {
     const reqId = await resolveReqId(`action.${name}`);
     const store = newStore(reqId, "ACTION", name);
@@ -143,12 +168,19 @@ export function withAction<I, O>(name: string, fn: (input: I) => Promise<O>) {
       alog.info("enter", { input: summarizeInput(input) });
       let out: ActionResult<O>;
       try {
-        const data = await fn(input);
+        if (!schema) throw new AppError("BAD_REQUEST", `No input schema for action ${name}.`, { status: 500 });
+        const parsed = schema.safeParse(input);
+        if (!parsed.success) {
+          alog.warn(`input refused by schema: ${parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"} ${i.code}`).join(", ")}`);
+          throw new AppError("BAD_REQUEST", "That request was not in the expected shape.", { status: 400 });
+        }
+        const data = await fn(parsed.data as I);
         alog.info(`exit ok in ${Math.round(performance.now() - store.startedAt)}ms`);
         out = { ok: true, data, reqId };
       } catch (err) {
         const appErr = toAppError(err);
         alog.error(`exit failed with ${appErr.code} in ${Math.round(performance.now() - store.startedAt)}ms`, { err });
+        if (appErr.status >= 500) reportError(err, { reqId, where: `action.${name}`, code: appErr.code });
         out = { ok: false, code: appErr.code, message: appErr.message, reqId };
       }
       if (await isDebugAllowed()) out._debug = [...store.lines];

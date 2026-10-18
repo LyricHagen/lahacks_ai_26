@@ -85,7 +85,7 @@ export default async function Page() {
             {empty ? (
               <EmptyState
                 title="No asks yet"
-                body="Describe what you are stuck on in your own words. Who2Ask finds the right colleague, says why, and drafts the message for you to send. Not sure where to start? The guided demo walks through one."
+                body="Describe what you are stuck on in your own words. Altostratus finds the right colleague, says why, and drafts the message for you to send. Not sure where to start? The guided demo walks through one."
                 action={
                   <>
                     <ButtonLink href="/ask/new" variant="primary">

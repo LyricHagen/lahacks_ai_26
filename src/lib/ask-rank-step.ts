@@ -28,6 +28,7 @@ import { currentMode } from "./mode-request";
 import { contextDefaults, getProfile } from "./onboarding";
 import { breakdownLine, COMPONENT_LABEL, COMPONENTS, type Features, type GuardrailReport, RANK_CONFIG, rankCandidates, type RankOutcome, type Scored, templateReason, topComponents } from "./rank";
 import { buildFeatures, loadCooled, type RankProfile } from "./rank-inputs";
+import { span } from "./observe";
 import type { Evidence } from "./retrieval-paths";
 import { protectUnderstanding } from "./understand-build";
 import { normalizeUnderstanding } from "./understanding";
@@ -129,7 +130,7 @@ export async function rankAsk({ askId, progress }: StepContext): Promise<StepRes
     loadCooled(askId, asker, rankedAt),
   ]);
 
-  const outcome = rankCandidates(features, { tune: 0, cooled });
+  const outcome = await span("ask.rank", "ai.ranking", { ask_id: askId, candidates: features.length }, async () => rankCandidates(features, { tune: 0, cooled }));
   const W = outcome.weights;
   log.info(`${askId} rank config ${RANK_CONFIG.version} tune=0 weights ${COMPONENTS.map((c) => `${c}=${W[c]}`).join(" ")} urgency=${urgency} horizon="${horizon}" availability=${provider} askerTz=${askerTz} clock=${clock.pinned ? "pinned" : "system"} now=${now.toISOString()}`, { askId, guardrails: RANK_CONFIG.guardrails, shortlist: RANK_CONFIG.shortlist });
 
