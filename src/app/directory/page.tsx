@@ -7,6 +7,7 @@ import { EmptyState, ErrorState } from "@/components/ui/states";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
 import { directoryFacets, type DirectoryFilters, LOAD_WINDOW_DAYS, listEmployees, PAGE_SIZE, parseFilters } from "@/lib/directory";
 import { toAppError } from "@/lib/errors";
+import { getClock } from "@/lib/clock-request";
 import { createLogger, currentReqId } from "@/lib/log";
 import { withPage } from "@/lib/request-context";
 import { ZONE_LABEL, ZONES } from "@/lib/time";
@@ -36,14 +37,14 @@ export default async function DirectoryPage({ searchParams }: { searchParams: Pr
       <PageHeader
         eyebrow="/directory"
         title="Directory"
-        description="Everyone at Corvid Systems, the synthetic company the app ranks against. Search by name, title, team, skill or service."
+        description="Everyone at Ferndale Systems, the synthetic company the app ranks against. Search by name, title, team, skill or service."
       />
     );
 
     let data: Awaited<ReturnType<typeof listEmployees>>;
     let facets: Awaited<ReturnType<typeof directoryFacets>>;
     try {
-      [data, facets] = await Promise.all([listEmployees(f), directoryFacets()]);
+      [data, facets] = await Promise.all([listEmployees(f, (await getClock()).now), directoryFacets()]);
     } catch (err) {
       const e = toAppError(err);
       log.error("directory failed to load", { err, code: e.code });

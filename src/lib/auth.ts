@@ -26,9 +26,13 @@ export type SessionUser = {
   employeeId: string | null;
   createdAt: Date;
   approved: boolean;
+  /** The shared guided demo account (src/lib/demo.ts): always demo mode, whatever its status. */
+  isDemo: boolean;
 };
 
-const MEMO_KEY = "sessionUser";
+/** Exported so code that acts as another account for one block (src/lib/demo.ts) can preset it. */
+export const SESSION_MEMO_KEY = "sessionUser";
+const MEMO_KEY = SESSION_MEMO_KEY;
 
 /** Read the session cookie and load the account. Memoized per request. Null means signed out. */
 export async function getSessionUser(): Promise<SessionUser | null> {
@@ -55,7 +59,7 @@ async function loadSessionUser(): Promise<SessionUser | null> {
   }
   const rows = await q("auth.session.user", (db) =>
     db
-      .select({ id: t.users.id, email: t.users.email, role: t.users.role, status: t.users.status, employeeId: t.users.employeeId, createdAt: t.users.createdAt })
+      .select({ id: t.users.id, email: t.users.email, role: t.users.role, status: t.users.status, employeeId: t.users.employeeId, createdAt: t.users.createdAt, isDemo: t.users.isDemo })
       .from(t.users)
       .where(eq(t.users.id, userId))
       .limit(1),
@@ -66,7 +70,7 @@ async function loadSessionUser(): Promise<SessionUser | null> {
     return null;
   }
   const user: SessionUser = { ...row, approved: row.status === "approved" };
-  log.debug(`session: ${user.id} role=${user.role} status=${user.status} persona=${user.employeeId ?? "none"}`, { userId: user.id });
+  log.debug(`session: ${user.id} role=${user.role} status=${user.status} persona=${user.employeeId ?? "none"}${user.isDemo ? " (shared demo account)" : ""}`, { userId: user.id });
   return user;
 }
 

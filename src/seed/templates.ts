@@ -53,11 +53,11 @@ export function city(rng: Rng, tz: Zone): string {
 
 export function tenurePhrase(startDay: number): string {
   const days = -startDay;
-  if (days < 14) return "Joined Corvid this month.";
-  if (days < 90) return `Joined Corvid ${Math.round(days / 7)} weeks ago.`;
-  if (days < 365) return `Joined Corvid ${Math.round(days / 30)} months ago.`;
+  if (days < 14) return "Joined Ferndale this month.";
+  if (days < 90) return `Joined Ferndale ${Math.round(days / 7)} weeks ago.`;
+  if (days < 365) return `Joined Ferndale ${Math.round(days / 30)} months ago.`;
   const years = Math.round(days / 365);
-  return `Has been at Corvid for ${years === 1 ? "about a year" : `${years} years`}.`;
+  return `Has been at Ferndale for ${years === 1 ? "about a year" : `${years} years`}.`;
 }
 
 export function listPhrase(items: string[]): string {
@@ -129,7 +129,7 @@ export function serviceRunbookBody(p: { name: string; repo: string; team: string
     "Dashboards",
     `The ${p.name} overview dashboard shows request rate, error rate and latency. Error rate above 1 percent for five minutes pages the on-call engineer.`,
     "Deploy and roll back",
-    `Deploy with \`corvid deploy ${p.name}\`. Roll back with \`corvid deploy ${p.name} --previous\`; it takes about two minutes.`,
+    `Deploy with \`ferndale deploy ${p.name}\`. Roll back with \`ferndale deploy ${p.name} --previous\`; it takes about two minutes.`,
     "Common alerts",
     `High error rate: check the most recent deploy first. If it started right after a deploy, roll back before debugging.`,
     `High latency: check the database panel. Slow queries usually come from a missing index on a new column.`,
@@ -140,28 +140,28 @@ export function serviceRunbookBody(p: { name: string; repo: string; team: string
 
 export const GENERAL_BODIES: Record<string, string> = {
   doc_first_week: [
-    "Welcome to Corvid. Your first week is about access, people and one small win.",
+    "Welcome to Ferndale. Your first week is about access, people and one small win.",
     "Day 1: pick up your laptop, finish the onboarding portal checklist and meet your buddy.",
     "Day 2: set up your development environment (see Setting up your laptop and VPN) and read your team's service overviews.",
     "Day 3 to 5: pair with your buddy on a small change and ship it behind a flag.",
     "Your manager schedules a 30 minute check-in on day 5. Bring questions; nobody expects you to know how things work yet.",
   ].join("\n\n"),
   doc_laptop_setup: [
-    "Your laptop arrives enrolled in device management. Sign in with your Corvid account and wait for the setup profile to finish (about 20 minutes).",
+    "Your laptop arrives enrolled in device management. Sign in with your Ferndale account and wait for the setup profile to finish (about 20 minutes).",
     "VPN: install the client from the self service app and sign in with SSO. It reconnects automatically; if it drops every hour, update the client from self service.",
-    "Developer tools are installed by `corvid setup`. Run it once after the profile finishes.",
+    "Developer tools are installed by `ferndale setup`. Run it once after the profile finishes.",
     "Lost or broken laptop: file a ticket with IT. Do not wipe it yourself.",
   ].join("\n\n"),
   doc_eng_onboarding: [
     "From laptop to first deploy in four steps.",
-    "1. Run `corvid setup`, then clone your team's main repo.",
+    "1. Run `ferndale setup`, then clone your team's main repo.",
     "2. Every repo has `make dev` and `make test`. If either fails on a clean checkout, that is a bug: tell the owning team.",
     "3. Open a small pull request. Two approvals are required for services marked tier one.",
-    "4. Merging to main deploys to staging automatically. Production deploys run through build-pipeline with `corvid deploy <service>`.",
+    "4. Merging to main deploys to staging automatically. Production deploys run through build-pipeline with `ferndale deploy <service>`.",
     "Each service lists its primary and secondary owner in the service catalog. Ask them, not the whole channel.",
   ].join("\n\n"),
   doc_pto_policy: [
-    "Corvid has flexible time off with a recommended minimum of 15 days a year, plus local public holidays.",
+    "Ferndale has flexible time off with a recommended minimum of 15 days a year, plus local public holidays.",
     "Put time off on your calendar as Out of office so teammates and tools can see it. Tell your manager at least two weeks ahead for anything longer than three days.",
     "New hires can take time off from their first month.",
   ].join("\n\n"),

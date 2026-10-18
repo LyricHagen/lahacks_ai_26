@@ -6,6 +6,7 @@
 // The request id comes from AsyncLocalStorage (set by withRoute / withAction / withPage in
 // src/lib/request-context.ts), so it never has to be passed around by hand.
 
+import { wallNow } from "@/lib/clock";
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
   type Level,
@@ -25,6 +26,8 @@ export type RequestStore = {
   lines: string[];
   /** Per-request memo (the session user, so it is looked up once per request). */
   memo?: Map<string, unknown>;
+  /** Exact strings to scrub from every line of this request (see markSensitive). */
+  sensitive?: string[];
 };
 
 const RING_SIZE = 500;
@@ -49,6 +52,20 @@ export const requestStorage = globals.als;
 
 export function currentRequest(): RequestStore | undefined {
   return globals.als.getStore();
+}
+
+/**
+ * Scrub this exact value from every later line of the current request, wherever it shows up
+ * (SQL parameters at trace level, error messages). For user text that must never be logged,
+ * such as an ask's confidential note. Values shorter than 3 characters are scrubbed only by key.
+ */
+export function markSensitive(value: string | null | undefined): void {
+  const store = globals.als.getStore();
+  if (!value || !store) return;
+  (store.sensitive ??= []).push(value);
+  // JSON encoding escapes quotes and backslashes, so scrub the encoded form too.
+  const encoded = JSON.stringify(value).slice(1, -1);
+  if (encoded !== value) store.sensitive.push(encoded);
 }
 
 export function currentReqId(): string {
@@ -76,7 +93,7 @@ function write(level: Level, scope: string, msg: string, ctx?: LogContext): stri
   if (levelRank(level) < levelRank(minLevel)) return null;
   const store = globals.als.getStore();
   const reqId = store?.reqId ?? "req_none";
-  const line = formatLine({ time: new Date(), reqId, scope, level, msg, ctx }, knownSecrets());
+  const line = formatLine({ time: wallNow(), reqId, scope, level, msg, ctx }, store?.sensitive?.length ? [...knownSecrets(), ...store.sensitive] : knownSecrets());
 
   globals.ring.push({ reqId, line });
   if (globals.ring.length > RING_SIZE) globals.ring.splice(0, globals.ring.length - RING_SIZE);

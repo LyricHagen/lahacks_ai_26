@@ -1,0 +1,1 @@
+DROP TYPE "public"."ask_status";

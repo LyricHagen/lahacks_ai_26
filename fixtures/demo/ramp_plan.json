@@ -1,0 +1,17 @@
+{
+  "purpose": "ramp_plan",
+  "note": "Committed demo phrasing for the weekly ramp plan. Demo mode never calls a model: src/lib/model-purposes.ts picks the top of each pool decided by code (src/lib/ramp-signals.ts) and fills these lines only with facts from that pool, so every demo sentence passes the same fact check as a live one. {signal} is the strongest reason for the skill gap; {fact} and {fact2} are the item's own facts.",
+  "learn": {
+    "document": "{signal}. Start with this {kindNoun} about {service}, written by {author}.",
+    "employee": "{signal}. {first} is a good person to learn it from: {evidence}. Ask for 20 minutes this week."
+  },
+  "stretch": {
+    "taskWithLead": "Ask {lead} for one small, self-contained piece of {title} that you can finish this week{skillPart}.",
+    "taskNoLead": "Pick one small, self-contained piece of {title} that you can finish this week{skillPart}.",
+    "skillPart": ", and use it to practise {skill}",
+    "why": "{fact}."
+  },
+  "meet": {
+    "why": "{fact2}. A short intro now means you know who to ask before you are blocked."
+  }
+}

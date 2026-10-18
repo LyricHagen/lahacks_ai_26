@@ -32,7 +32,8 @@ export type DayPlan = {
 };
 
 /** Group a person's events by their local day and find open windows inside working hours. */
-export function planWeek(events: Event[], tz: string, now = new Date()): DayPlan[] {
+/** `now` is app time from src/lib/clock.ts (pinned in demo mode). */
+export function planWeek(events: Event[], tz: string, now: Date): DayPlan[] {
   const today = localDate(now, tz);
   const nowMin = toMin(localTime(now, tz));
   return Array.from({ length: 7 }, (_, i) => {
@@ -58,8 +59,8 @@ export function planWeek(events: Event[], tz: string, now = new Date()): DayPlan
   });
 }
 
-export function WeekCalendar({ events, tz }: { events: Event[]; tz: string }) {
-  const days = planWeek(events, tz);
+export function WeekCalendar({ events, tz, now }: { events: Event[]; tz: string; now: Date }) {
+  const days = planWeek(events, tz, now);
   return (
     <div>
       <p className="mb-3 text-sm text-muted">

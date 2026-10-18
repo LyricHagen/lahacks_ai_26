@@ -22,6 +22,8 @@ const RULES = [
   { name: "blur or glass", re: /(?<![\w-])(backdrop-blur|blur)(-[a-z0-9]+)?(?![\w-])/, only: /\.(tsx|css)$/ },
   { name: "hover motion", re: /hover:(scale|translate|rotate|-translate|skew)/ },
   { name: "animation utility", re: /(?<![\w-])animate-(spin|ping|pulse|bounce)/ },
+  // Time comes from src/lib/clock.ts (app time pinned in demo mode, or wall time for infrastructure).
+  { name: "system time outside src/lib/clock.ts", re: /\bDate\.now\(|new Date\(\s*\)/, only: /\.(tsx|ts|mjs)$/, skip: /^(src\/lib\/clock\.ts|scripts\/check-rules\.mjs)$/ },
   { name: "forbidden font", re: /\b(Inter|Geist|Space[_ ]Grotesk)\b(?!\w)/, only: /\.(tsx|ts|css)$/ },
 ];
 

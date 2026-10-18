@@ -1,16 +1,17 @@
-import { StubPage } from "@/components/stub-page";
+import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/auth";
+import { createLogger } from "@/lib/log";
+import { getProfile, nextStep } from "@/lib/onboarding";
+import { withPage } from "@/lib/request-context";
 
-export const metadata = { title: "Set up your profile" };
+const log = createLogger("page.onboarding");
 
-export default function Page() {
-  return (
-    <StubPage
-      name="onboarding"
-      path="/onboarding"
-      title="Set up your profile"
-      prompt={4}
-      shape="form"
-      summary="Tell Who2Ask your team, role, start date and what you are working on, so it can rank people for you."
-    />
-  );
+/** /onboarding has no screen of its own: it sends you to the first step not done yet. */
+export default async function Page() {
+  return withPage("onboarding", async () => {
+    const user = await requireUser("/onboarding");
+    const next = nextStep(await getProfile(user.id));
+    log.branch(`redirect to /onboarding/${next ?? "role"}`, next ? `${next} is the first step not done` : "onboarding is complete, showing the first step for review");
+    redirect(`/onboarding/${next ?? "role"}`);
+  });
 }

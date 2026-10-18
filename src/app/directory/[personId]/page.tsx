@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { ReactNode } from "react";
+import { type ReactNode, Suspense } from "react";
+import { PersonAvailabilityPanel, PersonAvailabilitySkeleton } from "@/components/availability/person-availability";
 import { formatDate, LoadCell, SourceBadge, ZoneText } from "@/components/directory/bits";
 import { WeekCalendar } from "@/components/directory/week-calendar";
 import { Container, PageHeader } from "@/components/page-header";
@@ -9,10 +10,15 @@ import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/ui/states";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
+import { availabilityForPerson } from "@/lib/availability";
+import { clockLabel } from "@/lib/clock";
+import { getClock } from "@/lib/clock-request";
 import { getPerson, LOAD_WINDOW_DAYS, type PersonDetail } from "@/lib/directory";
 import { toAppError } from "@/lib/errors";
 import { createLogger, currentReqId } from "@/lib/log";
+import { getProfile } from "@/lib/onboarding";
 import { withPage } from "@/lib/request-context";
+import { getViewer } from "@/lib/viewer";
 
 const log = createLogger("page.person");
 
@@ -31,8 +37,8 @@ function Section({ title, children, meta }: { title: string; children: ReactNode
   );
 }
 
-function tenure(startDate: string): string {
-  const days = Math.round((Date.now() - Date.parse(`${startDate}T00:00:00Z`)) / 86400_000);
+function tenure(startDate: string, now: Date): string {
+  const days = Math.round((now.getTime() - Date.parse(`${startDate}T00:00:00Z`)) / 86400_000);
   if (days < 0) return "starts soon";
   if (days < 60) return `${days} days`;
   if (days < 730) return `${Math.round(days / 30)} months`;
@@ -42,9 +48,10 @@ function tenure(startDate: string): string {
 export default async function PersonPage({ params }: { params: Promise<{ personId: string }> }) {
   return withPage("directory.person", async () => {
     const { personId } = await params;
+    const clock = await getClock();
     let data: PersonDetail | null;
     try {
-      data = await getPerson(personId);
+      data = await getPerson(personId, clock.now);
     } catch (err) {
       const e = toAppError(err);
       log.error("person failed to load", { err, personId, code: e.code });
@@ -63,6 +70,15 @@ export default async function PersonPage({ params }: { params: Promise<{ personI
     const { person: p } = data;
     const load = data.asks.length;
     const activeMentees = data.mentoring.filter((m) => !m.endedOn);
+    // Started here, inside the request context, so its log lines keep this request id while the
+    // section streams in behind its skeleton.
+    const viewer = await getViewer();
+    const profile = viewer.user ? await getProfile(viewer.user.id) : null;
+    if (!profile) log.branch("availability advice as Slack", viewer.user ? `${viewer.user.id} has no onboarding profile` : "signed-out visitor, default channel");
+    const availability = availabilityForPerson(`person ${p.id}`, p.id, viewer.personaId, profile?.preferredChannel ?? "slack", clock.now).catch((err: unknown) => {
+      log.error(`availability for ${p.id} failed`, { err, code: "AVAILABILITY_FAILED" });
+      return "failed" as const;
+    });
 
     return (
       <Container>
@@ -93,7 +109,7 @@ export default async function PersonPage({ params }: { params: Promise<{ personI
                 </dd>
                 <dt className="text-muted">Started</dt>
                 <dd>
-                  <span className="font-mono text-[13px]">{formatDate(p.startDate)}</span> <span className="text-muted">({tenure(p.startDate)})</span>
+                  <span className="font-mono text-[13px]">{formatDate(p.startDate)}</span> <span className="text-muted">({tenure(p.startDate, clock.now)})</span>
                 </dd>
                 <dt className="text-muted">Seniority</dt>
                 <dd className="capitalize">{p.seniority}</dd>
@@ -270,8 +286,27 @@ export default async function PersonPage({ params }: { params: Promise<{ personI
               )}
             </Section>
 
+            <Section
+              title="Availability"
+              meta={
+                <>
+                  Free and busy only, over the next 14 days, in their working hours. Times are in your time zone with theirs in parentheses.
+                  {clock.pinned ? (
+                    <>
+                      {" "}
+                      Demo clock: as of <span className="font-mono">{clockLabel(clock.now)}</span>, a fixed moment inside the seeded calendars.
+                    </>
+                  ) : null}
+                </>
+              }
+            >
+              <Suspense fallback={<PersonAvailabilitySkeleton />}>
+                <PersonAvailabilityPanel promise={availability} personId={p.id} firstName={p.name.split(" ")[0]} />
+              </Suspense>
+            </Section>
+
             <Section title="Calendar, next 7 days">
-              <WeekCalendar events={data.calendar} tz={p.timezone} />
+              <WeekCalendar events={data.calendar} tz={p.timezone} now={clock.now} />
             </Section>
 
             <Section title="Documents written" meta="When a question is already answered in one of these, the app suggests the document before a person.">

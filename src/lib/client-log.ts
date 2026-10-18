@@ -7,6 +7,7 @@
 // Lines go to the browser console and to the debug drawer. The request id slot shows
 // `client`, or the server request id when the line is about a specific API call.
 
+import { wallNow } from "@/lib/clock";
 import { pushEntries } from "./debug-store";
 import { type Level, type LogContext, formatLine, serializeError } from "./log-format";
 
@@ -27,7 +28,7 @@ const rawConsole = typeof console !== "undefined" ? { log: console.log, warn: co
 
 export function writeClientLine(level: Level, scope: string, msg: string, ctx?: LogContext, reqId = "client"): string {
   const fixed = ctx && "err" in ctx ? { ...ctx, err: serializeError(ctx.err) } : ctx;
-  const line = formatLine({ time: new Date(), reqId, scope, level, msg, ctx: fixed });
+  const line = formatLine({ time: wallNow(), reqId, scope, level, msg, ctx: fixed });
   pushEntries("client", [line]);
   if (rawConsole) {
     if (level === "error") rawConsole.error(line);

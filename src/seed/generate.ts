@@ -3,6 +3,7 @@
 // fixture script can replace bios, project descriptions and generic doc bodies with model text
 // afterwards, then calls embedCompany so embeddings match the final text.
 
+import { wallNow } from "@/lib/clock";
 import { EMBEDDING_DIMS, EMBEDDING_MODEL, embedText } from "@/lib/embed";
 import type { Logger } from "@/lib/log";
 import type { Zone } from "@/lib/time";
@@ -13,6 +14,7 @@ import {
   FIRST_NAMES,
   GENERAL_DOCS,
   LAST_NAMES,
+  NAME_OVERRIDES,
   ORG,
   PLANTED,
   PLANTED_DOCS,
@@ -102,7 +104,9 @@ export function generateCompany(seed: string, log: Logger): Company {
       const last = nameRng.pick(LAST_NAMES);
       if (!usedNames.has(`${first} ${last}`)) {
         usedNames.add(`${first} ${last}`);
-        return { first, last };
+        const override = NAME_OVERRIDES[`${first} ${last}`];
+        if (override) usedNames.add(`${override.first} ${override.last}`);
+        return override ?? { first, last };
       }
     }
     throw new Error("ran out of unique names; add more to FIRST_NAMES or LAST_NAMES");
@@ -460,7 +464,7 @@ export function generateCompany(seed: string, log: Logger): Company {
       }
       if (!p.planted && skillRng.chance(0.55)) {
         const k = skillRng.pick(team.adjacent);
-        giveSkill(p.id, `skl_${k}`, skillRng.int(2, 3), "profile", `Listed in their profile; we have not seen ${skillName(`skl_${k}`)} in their Corvid work yet.`);
+        giveSkill(p.id, `skl_${k}`, skillRng.int(2, 3), "profile", `Listed in their profile; we have not seen ${skillName(`skl_${k}`)} in their Ferndale work yet.`);
       }
     }
     const mgr = managers.get(team.key)!;
@@ -636,7 +640,7 @@ export function generateCompany(seed: string, log: Logger): Company {
   const company: Company = {
     version: FIXTURE_VERSION,
     seed,
-    generatedAt: new Date().toISOString(),
+    generatedAt: wallNow().toISOString(),
     text: { source: "template", model: null, modelItems: 0, templateItems: employees.length + documents.length, note: "templated text, no model call" },
     embedding: { model: EMBEDDING_MODEL, dims: EMBEDDING_DIMS },
     org: ORG,

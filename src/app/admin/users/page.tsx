@@ -74,6 +74,7 @@ export default async function Page() {
                     <div className="font-mono text-[12px] text-subtle">
                       {r.id}
                       {r.role === "admin" ? ` admin${r.adminReason ? ` (${r.adminReason.replace("_", " ")})` : ""}` : ""}
+                      {r.isDemo ? " shared demo account" : ""}
                     </div>
                   </TD>
                   <TD>
@@ -105,7 +106,11 @@ export default async function Page() {
                     {r.costUsd.toFixed(4)}
                   </TD>
                   <TD>
-                    <UserDecision userId={r.id} email={r.email} status={r.status} isSelf={r.id === admin.id} />
+                    {r.isDemo ? (
+                      <span className="text-[13px] text-muted">Always demo mode</span>
+                    ) : (
+                      <UserDecision userId={r.id} email={r.email} status={r.status} isSelf={r.id === admin.id} />
+                    )}
                   </TD>
                 </TR>
               ))}

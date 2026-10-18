@@ -28,7 +28,9 @@ export type ModeReason =
   | "explicit_demo"
   | "missing_api_key"
   | "user_budget_exhausted"
-  | "global_budget_exhausted";
+  | "global_budget_exhausted"
+  | "demo_account"
+  | "owner_script";
 
 export type ResolvedMode = {
   mode: Mode;
@@ -59,6 +61,7 @@ export async function resolveMode(user: SessionUser | null, requested: Requested
   };
 
   if (!user) return decide("demo", "signed_out", "not signed in, so results come from the committed demo fixtures");
+  if (user.isDemo) return decide("demo", "demo_account", "the shared guided demo account never makes model calls, whatever its status");
   if (user.status === "rejected") return decide("demo", "rejected_user", "account was not approved, so only demo results are available");
   if (user.status !== "approved") return decide("demo", "pending_user", "account is pending approval by an admin, so results come from the demo fixtures");
   if (requested === "demo") return decide("demo", "explicit_demo", `the demo toggle is on (cookie ${MODE_COOKIE}=demo), so no model calls are made`);
@@ -74,6 +77,23 @@ export async function resolveMode(user: SessionUser | null, requested: Requested
   return decide("live", "approved_user", `approved account, key present, ${budget.userUsed ?? 0} of ${budget.userLimit} tokens used today`, budget);
 }
 
+/**
+ * Mode for a command-line script run by the owner (pnpm fixtures:record). Live only when the key
+ * exists; callModel still refuses a script actor inside the web server. Logged like resolveMode.
+ */
+export function resolveScriptMode(script: string, requested: RequestedMode = "auto"): ResolvedMode {
+  const live = hasProviderKey() && requested !== "demo";
+  const reason: ModeReason = live ? "owner_script" : requested === "demo" ? "explicit_demo" : "missing_api_key";
+  const message = live
+    ? `script ${script} run from the command line by the owner, key present`
+    : requested === "demo"
+      ? `script ${script} asked for demo mode (--dry-run), so no model calls are made`
+      : `script ${script}: ANTHROPIC_API_KEY is not set, so live calls are impossible`;
+  const r: ResolvedMode = { mode: live ? "live" : "demo", reason, message, userId: null, requested, budget: null };
+  log.info(`mode=${r.mode} reason=${r.reason} user=script:${script}: ${r.message}`, { hasKey: hasProviderKey() });
+  return r;
+}
+
 /** Short label for the header and notes. */
 export const MODE_REASON_LABEL: Record<ModeReason, string> = {
   approved_user: "approved account",
@@ -84,4 +104,6 @@ export const MODE_REASON_LABEL: Record<ModeReason, string> = {
   missing_api_key: "no model key on server",
   user_budget_exhausted: "your daily budget is used up",
   global_budget_exhausted: "today's shared budget is used up",
+  demo_account: "guided demo account",
+  owner_script: "owner's script",
 };

@@ -11,8 +11,12 @@ import { getDb, qIn, type Tx } from "@/db";
 import * as t from "@/db/schema";
 import { AppError } from "@/lib/errors";
 import { createLogger } from "@/lib/log";
+import { loadsThisWeek } from "@/lib/availability";
+import { clockLabel, demoInstant, wallNow } from "@/lib/clock";
 import { addDays, localToUtc, todayIso } from "@/lib/time";
 import { generateCalendars } from "./calendar";
+import { addDemoPersona } from "./demo-persona";
+import { generateDocHistory, PLANTED_DOC_FAILURES } from "./doc-history";
 import { type Company, DEFAULT_SEED, readFixture } from "./fixture";
 import { embedCompany, generateCompany, validateCompany } from "./generate";
 
@@ -21,8 +25,11 @@ const sumLog = createLogger("seed.summary");
 
 /** Every table the seed replaces, children first (the delete order). */
 const COMPANY_TABLES = [
+  ["ramp_dismissals", t.rampDismissals],
+  ["ramp_plans", t.rampPlans],
   ["ask_events", t.askEvents],
   ["ask_messages", t.askMessages],
+  ["ask_doc_checks", t.askDocChecks],
   ["ask_candidates", t.askCandidates],
   ["asks", t.asks],
   ["calendar_events", t.calendarEvents],
@@ -99,10 +106,12 @@ export async function seedDatabase(seed: string = DEFAULT_SEED): Promise<SeedSum
   const t0 = performance.now();
   log.info(`seed start`, { seed });
   const { company: c, source, warnings } = await resolveCompany(seed);
-  const anchor = todayIso();
+  const anchor = todayIso(wallNow());
   const day = (offset: number) => addDays(anchor, offset);
   const tzOf = new Map(c.employees.map((e) => [e.id, e.timezone]));
   log.info(`dates are relative to load day ${anchor}`, { anchor, reason: "fixture stores day offsets so new hires stay new and next week stays next week" });
+  // The guided demo's persona depends on the load day (eleven days in at the pinned clock).
+  addDemoPersona(c, anchor, log);
 
   const calendar = await log.timed("generate calendars", async () => generateCalendars(c, anchor), { days: 14 }, (rows) => ({ events: rows.length }));
 
@@ -126,6 +135,7 @@ export async function seedDatabase(seed: string = DEFAULT_SEED): Promise<SeedSum
 
   let usersRelinked = 0;
   let usersUnlinked = 0;
+  const docStats: { docFailures: string[]; docChecks: number } = { docFailures: [], docChecks: 0 };
 
   const db = getDb();
   await log.timed("transaction", () =>
@@ -217,7 +227,8 @@ export async function seedDatabase(seed: string = DEFAULT_SEED): Promise<SeedSum
           title: a.title,
           body: a.body,
           tried: a.tried,
-          status: a.status,
+          // The fixture predates the lifecycle (src/lib/ask-state.ts): "resolved" is now "answered".
+          status: a.status === "resolved" ? ("answered" as const) : ("sent" as const),
           source: "seed" as const,
           routedToId: a.routedToId,
           createdAt,
@@ -245,12 +256,24 @@ export async function seedDatabase(seed: string = DEFAULT_SEED): Promise<SeedSum
         "ask_events",
         t.askEvents,
         askRows.flatMap(({ a, createdAt, resolvedAt }) => [
-          { askId: a.id, kind: "created", data: { source: "seed" }, at: createdAt },
+          { askId: a.id, kind: "transition", fromState: null, toState: "sent" as const, actor: "system", reason: "seeded history: asked and routed directly, no ranking was run", data: { source: "seed" }, at: createdAt },
           { askId: a.id, kind: "marked_sent", data: { to: a.routedToId }, at: new Date(createdAt.getTime() + 10 * 60_000) },
-          ...(resolvedAt ? [{ askId: a.id, kind: "resolved", data: null, at: resolvedAt }] : []),
+          ...(resolvedAt
+            ? [{ askId: a.id, kind: "transition", fromState: "sent" as const, toState: "answered" as const, actor: "system", reason: "seeded history: answered", data: null, at: resolvedAt }]
+            : []),
         ]),
         1000,
       );
+
+      // Docs offered for seeded asks that did not answer them (the /insights "documentation failed" panel).
+      const createdOf = new Map(askRows.map(({ a, createdAt }) => [a.id, createdAt]));
+      const docHistory = generateDocHistory(c).map((r) => {
+        const at = createdOf.get(r.askId)!;
+        return { ...r, createdAt: at, verdictAt: new Date(at.getTime() + 5 * 60_000) };
+      });
+      await insertAll(tx, "ask_doc_checks (seeded history)", t.askDocChecks, docHistory);
+      docStats.docFailures = Object.keys(PLANTED_DOC_FAILURES).map((id) => `${id}:${docHistory.filter((r) => r.documentId === id).length}`);
+      docStats.docChecks = docHistory.length;
 
       // Restore persona links that still point at a real employee.
       const ids = new Set(c.employees.map((e) => e.id));
@@ -268,7 +291,7 @@ export async function seedDatabase(seed: string = DEFAULT_SEED): Promise<SeedSum
         "seed.text_model": c.text.model ?? "",
         "seed.embedding_model": c.embedding.model,
         "seed.anchor_day": anchor,
-        "seed.loaded_at": new Date().toISOString(),
+        "seed.loaded_at": wallNow().toISOString(),
         "seed.fixture_generated_at": c.generatedAt,
         "seed.scenarios": JSON.stringify(c.scenarios),
         "seed.planted": JSON.stringify(c.employees.filter((e) => e.planted).map((e) => ({ id: e.id, planted: e.planted }))),
@@ -279,6 +302,12 @@ export async function seedDatabase(seed: string = DEFAULT_SEED): Promise<SeedSum
             h.insert(t.appMeta).values({ key, value }).onConflictDoUpdate({ target: t.appMeta.key, set: { value, updatedAt: sql`now()` } }),
           );
         }
+        // The org-level insights opt-in is an admin decision: written once for the demo company,
+        // never overwritten by a reseed (an admin who turned it off keeps it off).
+        const optIn = JSON.stringify({ on: true, by: "seed", at: wallNow().toISOString(), why: "the synthetic demo company opts in so /insights has data" });
+        const res = await qIn(tx, "seed.meta.insights.opt_in", (h) => h.insert(t.appMeta).values({ key: "insights.opt_in", value: optIn }).onConflictDoNothing().returning({ key: t.appMeta.key }));
+        if (res.length) log.info("insights opt-in written for the demo company (on, by seed)");
+        else log.skip("insights opt-in", "already set by an earlier seed or an admin; a reseed never changes it");
       });
     }),
   );
@@ -291,7 +320,7 @@ export async function seedDatabase(seed: string = DEFAULT_SEED): Promise<SeedSum
     textModel: c.text.model,
     embeddingModel: c.embedding.model,
     anchorDay: anchor,
-    loadedAt: new Date().toISOString(),
+    loadedAt: wallNow().toISOString(),
     totalMs: Math.round(performance.now() - t0),
     steps,
     counts,
@@ -306,6 +335,7 @@ export async function seedDatabase(seed: string = DEFAULT_SEED): Promise<SeedSum
       .onConflictDoUpdate({ target: t.appMeta.key, set: { value: JSON.stringify(summary), updatedAt: sql`now()` } }),
   );
   await logSummary(summary, c);
+  sumLog.info(`seeded doc history: ${docStats.docChecks} offered docs did not answer a seeded ask; planted failing docs ${docStats.docFailures.join(", ")}`);
   return summary;
 }
 
@@ -333,16 +363,13 @@ async function logSummary(s: SeedSummary, c: Company): Promise<void> {
   sumLog.info("row counts", s.counts);
   sumLog.info("step timings", Object.fromEntries(s.steps.map((x) => [x.step, `${x.rows} rows ${x.ms}ms`])));
 
-  const db = getDb();
-  const weekAgo = new Date(Date.now() - 7 * 86400_000);
-  const loads = await qIn(db, "seed.summary.load", (h) =>
-    h
-      .select({ id: t.asks.routedToId, n: count() })
-      .from(t.asks)
-      .where(sql`${t.asks.createdAt} >= ${weekAgo.toISOString()}`)
-      .groupBy(t.asks.routedToId),
+  // Load as the demo sees it: the app's rule (loadsThisWeek) at the pinned demo clock.
+  const demoNow = demoInstant(s.anchorDay);
+  sumLog.info(`demo clock pinned at ${demoNow.toISOString()} (${clockLabel(demoNow)}); asks this week below are counted at that instant`);
+  const loadOf = await loadsThisWeek(
+    c.employees.map((e) => e.id),
+    demoNow,
   );
-  const loadOf = new Map(loads.map((l) => [l.id, Number(l.n)]));
   const byId = new Map(c.employees.map((e) => [e.id, e]));
   const ownerOf = (id: string) =>
     c.services.filter((x) => x.primaryOwnerId === id || x.secondaryOwnerId === id).map((x) => `${x.name}:${x.primaryOwnerId === id ? "primary" : "secondary"}`);

@@ -6,10 +6,13 @@ import "server-only";
 //
 // There is deliberately no /api/auth/[...nextauth] route: signing in only happens through the
 // rate-limited server action in src/app/login/actions.ts, so the limit cannot be bypassed.
+// The second provider, "demo", signs in to the shared guided demo account without a password. It
+// is reachable only through signIn("demo") in the demo action (src/lib/demo-actions.ts), for the
+// same reason: no route exposes providers over HTTP.
 
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { verifyCredentials } from "./accounts";
+import { findDemoAccount, verifyCredentials } from "./accounts";
 import { createLogger } from "./log";
 
 const log = createLogger("auth.core");
@@ -34,6 +37,16 @@ export const { auth, signIn, signOut } = NextAuth({
         const password = typeof credentials?.password === "string" ? credentials.password : "";
         const user = await verifyCredentials(email, password);
         return user ? { id: user.id, email: user.email } : null;
+      },
+    }),
+    Credentials({
+      id: "demo",
+      name: "Guided demo",
+      credentials: {},
+      async authorize() {
+        const demo = await findDemoAccount();
+        if (!demo) log.warn("demo sign in refused: there is no demo account yet (the demo action creates it first)");
+        return demo;
       },
     }),
   ],

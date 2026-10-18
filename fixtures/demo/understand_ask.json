@@ -1,0 +1,87 @@
+{
+  "purpose": "understand_ask",
+  "note": "Committed demo results for the composer examples on /ask/new. Demo mode reads this file and never calls a model; any other ask in demo mode goes through the keyword extractor in src/lib/understanding.ts. Ids must exist in the seeded company (corvid-v1).",
+  "examples": [
+    {
+      "exampleId": "deploy",
+      "bodyStartsWith": "My deploy of invoice-worker to staging fails at the Helm upgrade step",
+      "output": {
+        "restatement": "You need someone to explain why the staging deploy of invoice-worker times out at the Helm upgrade and rolls back before the new pods become ready.",
+        "serviceIds": ["svc_invoicing", "svc_k8s", "svc_build"],
+        "skillIds": ["skl_kubernetes", "skl_ci_cd"],
+        "artifacts": [
+          { "kind": "error", "text": "context deadline exceeded" },
+          { "kind": "other", "text": "Helm upgrade step of the staging deploy" }
+        ],
+        "helpKind": "unblock",
+        "urgency": "blocked_now",
+        "sensitive": []
+      }
+    },
+    {
+      "exampleId": "stripe",
+      "bodyStartsWith": "A staging shipper got charged twice when a Stripe webhook retried",
+      "output": {
+        "restatement": "You want to find where billing-service deduplicates Stripe webhook events, because a retried webhook charged a staging shipper twice.",
+        "serviceIds": ["svc_billing"],
+        "skillIds": ["skl_stripe_api", "skl_payments"],
+        "artifacts": [{ "kind": "other", "text": "Stripe webhook handler in billing-service" }],
+        "helpKind": "where_is",
+        "urgency": null,
+        "sensitive": []
+      }
+    },
+    {
+      "exampleId": "kafka",
+      "bodyStartsWith": "Consumer lag on the shipment events topic keeps growing in ingest-pipeline",
+      "output": {
+        "restatement": "You want to know whether growing consumer lag on the shipment events topic in ingest-pipeline is expected after the Airflow backfill.",
+        "serviceIds": ["svc_ingest"],
+        "skillIds": ["skl_kafka", "skl_airflow"],
+        "artifacts": [{ "kind": "other", "text": "shipment events topic consumer lag" }],
+        "helpKind": "is_expected",
+        "urgency": null,
+        "sensitive": []
+      }
+    },
+    {
+      "exampleId": "sso",
+      "bodyStartsWith": "One enterprise shipper's SAML login loops back to the sign-in page on auth-gateway",
+      "output": {
+        "restatement": "You need the owner of SSO in auth-gateway to help with one enterprise shipper whose SAML login loops back to the sign-in page.",
+        "serviceIds": ["svc_auth"],
+        "skillIds": ["skl_oauth_sso"],
+        "artifacts": [{ "kind": "other", "text": "the SAML assertion auth-gateway receives" }],
+        "helpKind": "unblock",
+        "urgency": null,
+        "sensitive": []
+      }
+    },
+    {
+      "exampleId": "ios",
+      "bodyStartsWith": "The iOS release build in mobile-ci fails at the archive step",
+      "output": {
+        "restatement": "You need help with the iOS release build in mobile-ci, which fails at the archive step since the runners moved to the new Xcode.",
+        "serviceIds": ["svc_mobile_build"],
+        "skillIds": ["skl_ios_release", "skl_swift"],
+        "artifacts": [{ "kind": "other", "text": "archive step of the iOS release build" }],
+        "helpKind": "unblock",
+        "urgency": "blocked_now",
+        "sensitive": []
+      }
+    },
+    {
+      "exampleId": "flags",
+      "bodyStartsWith": "How do people usually add a feature flag in flagd for a change in the web app?",
+      "output": {
+        "restatement": "You want to learn the usual way to add a feature flag in flagd for a change in the web app before your first rollout.",
+        "serviceIds": ["svc_flags", "svc_web_app"],
+        "skillIds": ["skl_feature_flags"],
+        "artifacts": [],
+        "helpKind": "how_works",
+        "urgency": "curious",
+        "sensitive": []
+      }
+    }
+  ]
+}

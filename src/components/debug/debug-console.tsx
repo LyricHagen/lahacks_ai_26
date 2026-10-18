@@ -1,5 +1,6 @@
 "use client";
 
+import { wallNow } from "@/lib/clock";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiFetch } from "@/lib/api-client";
@@ -14,7 +15,7 @@ import { LogView } from "./log-view";
 const log = createLogger("debug.page");
 
 function download(entries: readonly DebugEntry[], label: string) {
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const stamp = wallNow().toISOString().replace(/[:.]/g, "-");
   const blob = new Blob([toPlainText(entries, label) + "\n"], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

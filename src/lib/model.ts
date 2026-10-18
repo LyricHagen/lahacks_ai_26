@@ -10,9 +10,16 @@ import "server-only";
 // Checks, in order, each logged as "gate N/5 <check>: pass|FAIL ...":
 //   1 mode is live   2 user is approved   3 user under daily token budget
 //   4 global daily budget not exhausted   5 provider key exists
-// Any failure (and any provider error) falls back to the purpose's demo fixture instead of
-// throwing. Every call writes exactly one usage_log row, whatever the outcome.
+// Any failure (and any provider error) falls back to a demo result instead of throwing: first the
+// recorded live result for this exact input (fixtures/model/, "fixture HIT"), else the purpose's
+// deterministic demo result ("fixture MISS ... hash=..."). Every call writes exactly one
+// usage_log row, whatever the outcome.
+//
+// Scripts run by the owner (pnpm fixtures:record) wrap their work in runAsScript: inside it the
+// gate sees the script actor instead of the session user, and every live answer is handed to the
+// script's recorder. The web server never runs inside runAsScript (gate 2 refuses it there).
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import Anthropic from "@anthropic-ai/sdk";
 import { q } from "@/db";
 import * as t from "@/db/schema";
@@ -21,6 +28,7 @@ import { getBudgetState } from "./budget";
 import { type ErrorCode, toAppError } from "./errors";
 import { createLogger, currentReqId } from "./log";
 import { hasProviderKey, MODE_REASON_LABEL, type Mode, type ResolvedMode } from "./mode";
+import { type FixtureKey, fixtureKey, fromPlaceholders, isRecordedPurpose, lookupRecorded, normalizeForKey, toPlaceholders } from "./model-fixtures";
 import { estimateCostUsd, type ModelUsage, trackModelCall } from "./model-log";
 import { PURPOSES, type PurposeName } from "./model-purposes";
 
@@ -47,6 +55,11 @@ export type PurposeSpec<I, O> = {
   fixture(input: I): O | null;
   /** Short id for the log and the usage row (an ask id, a batch number). */
   describe?(input: I): string;
+  /**
+   * What identifies this input for a recorded fixture: the input without per-run ids (ask id,
+   * owner). Hashed by fixtureHash (src/lib/model-fixtures.ts). Absent: the purpose is never recorded.
+   */
+  key?(input: I): unknown;
 };
 
 type SpecOf<P extends PurposeName> = (typeof PURPOSES)[P];
@@ -56,11 +69,34 @@ export type PurposeOutput<P extends PurposeName> = SpecOf<P> extends PurposeSpec
 /** A command-line script run by the owner (pnpm fixture:generate). Refused inside the web server. */
 export type ScriptActor = { kind: "script"; name: string };
 
+/** A live answer handed to the recording script (pnpm fixtures:record). */
+export type LiveRecord = { purpose: string; hash: string; label: string; input: unknown; output: unknown; model: string; usage: ModelUsage };
+
+export type ScriptRun = {
+  actor: ScriptActor;
+  /** Called with every live answer inside the run. */
+  record?: (r: LiveRecord) => void;
+  /** Serve an already recorded answer instead of calling live (re-runs only pay for new inputs). */
+  preferRecorded?: boolean;
+  /** Called for every demo result served inside the run, so a script can count hits and misses. */
+  onFixture?: (f: { purpose: string; kind: FixtureKind; hash: string | null; askIds: string[]; output: unknown }) => void;
+};
+
+const scriptRuns = new AsyncLocalStorage<ScriptRun>();
+
+/** Runs fn with the gate seeing a script actor. Only for command-line scripts. */
+export function runAsScript<T>(run: ScriptRun, fn: () => Promise<T>): Promise<T> {
+  return scriptRuns.run(run, fn);
+}
+
+/** Where a demo result came from: a recorded live answer, or the purpose's deterministic builder. */
+export type FixtureKind = "recorded" | "deterministic";
+
 export type GateOutcome = "live" | "mode_demo" | "not_approved" | "user_budget" | "global_budget" | "no_api_key" | "provider_error";
 
 export type ModelResult<O> =
   | { source: "live"; output: O; outcome: "live"; model: string; usage: ModelUsage; costUsd: number | null; ms: number }
-  | { source: "fixture"; output: O; outcome: Exclude<GateOutcome, "live">; note: string }
+  | { source: "fixture"; output: O; outcome: Exclude<GateOutcome, "live">; note: string; fixture: { kind: FixtureKind; hash: string | null } }
   | { source: "none"; output: null; outcome: Exclude<GateOutcome, "live">; note: string; code: ErrorCode };
 
 const OUTCOME_NOTE: Record<Exclude<GateOutcome, "live">, string> = {
@@ -88,20 +124,39 @@ export async function callModel<P extends PurposeName>(args: {
 }): Promise<ModelResult<PurposeOutput<P>>> {
   const spec = PURPOSES[args.purpose] as unknown as PurposeSpec<PurposeInput<P>, PurposeOutput<P>>;
   const mode: Mode = typeof args.mode === "string" ? args.mode : args.mode.mode;
-  const isScript = args.user !== null && "kind" in args.user && args.user.kind === "script";
-  const userId = args.user && !isScript ? (args.user as SessionUser).id : null;
-  const who = isScript ? `script:${(args.user as ScriptActor).name}` : (userId ?? "signed-out");
+  const run = scriptRuns.getStore();
+  if (run && process.env.NEXT_RUNTIME) log.warn(`runAsScript context ignored inside the web server for ${args.purpose}`);
+  const actor = run && !process.env.NEXT_RUNTIME ? run.actor : args.user;
+  const isScript = actor !== null && "kind" in actor && actor.kind === "script";
+  const userId = args.user && !("kind" in args.user) ? (args.user as SessionUser).id : null;
+  const who = isScript ? `script:${(actor as ScriptActor).name}${userId ? ` as ${userId}` : ""}` : (userId ?? "signed-out");
   const label = `${args.purpose}${spec.describe ? ` ${spec.describe(args.input)}` : ""}`;
   const req = spec.request(args.input);
   const t0 = performance.now();
+  let fkey: FixtureKey | null | undefined;
+  const fixKey = () => (fkey === undefined ? (fkey = spec.key ? fixtureKey(args.purpose, spec.key(args.input)) : null) : fkey);
+  const keyHash = () => fixKey()?.hash ?? null;
+  let hash: string | null = null;
 
   log.info(`call ${label} for ${who} requested in mode ${mode}`, { purpose: args.purpose, model: req.model, askId: args.askId });
+
+  hash = keyHash();
+  if (run?.preferRecorded && hash) {
+    const rec = recorded();
+    if (rec) {
+      log.branch(`serve recorded answer for ${label} without a live call`, `the script asked for recorded answers first and hash=${hash} is recorded`);
+      run.onFixture?.({ purpose: args.purpose, kind: "recorded", hash: keyHash(), askIds: fixKey()?.askIds ?? [], output: rec });
+      await writeUsage({ outcome: "mode_demo", demo: true, usage: { inputTokens: 0, outputTokens: 0 }, ms: Math.round(performance.now() - t0), costUsd: 0, errorCode: null, model: req.model });
+      return { source: "fixture", output: rec, outcome: "mode_demo", note: "Cached demo result: recorded earlier.", fixture: { kind: "recorded", hash: keyHash() } };
+    }
+  }
 
   const outcome = await runChecks();
   if (outcome !== "live") return fallback(outcome);
 
   // All five checks passed: spend.
   let usage: ModelUsage = { inputTokens: 0, outputTokens: 0 };
+  let rawText = "";
   try {
     const output = await trackModelCall(args.purpose, req.model, async () => {
       const r = await provider().messages.create(
@@ -120,12 +175,18 @@ export async function callModel<P extends PurposeName>(args: {
       if (r.stop_reason === "refusal") throw new Error(`model refused (stop_reason refusal, category ${r.stop_details?.category ?? "none"})`);
       if (r.stop_reason === "max_tokens") log.warn(`${label} hit max_tokens (${req.maxTokens}); output may be cut off`);
       const text = r.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
+      rawText = text;
       return { result: spec.parse(text, args.input), usage };
     });
     const ms = Math.round(performance.now() - t0);
     const costUsd = estimateCostUsd(req.model, usage);
     await writeUsage({ outcome: "live", demo: false, usage, ms, costUsd, errorCode: null, model: req.model });
     log.info(`call ${label} answered live in ${ms}ms`, { tokens: usage.inputTokens + usage.outputTokens, costUsd });
+    if (run?.record && keyHash() && isRecordedPurpose(args.purpose)) {
+      // The model's own JSON, as it came back: replay runs it through the same parse() as a live answer.
+      run.record({ purpose: args.purpose, hash: keyHash()!, label, input: spec.key!(args.input), output: toPlaceholders(asJson(rawText), fixKey()!.askIds), model: req.model, usage });
+      log.info(`recorded ${label} as hash=${hash}`, { purpose: args.purpose });
+    }
     return { source: "live", output, outcome: "live", model: req.model, usage, costUsd, ms };
   } catch (err) {
     const e = toAppError(err, "MODEL_CALL_FAILED");
@@ -148,7 +209,7 @@ export async function callModel<P extends PurposeName>(args: {
       if (!step(2, "user is approved", !inServer, inServer ? "script actor used inside the web server, refused" : "script run from the command line by the owner")) return "not_approved";
     } else {
       const u = args.user as SessionUser | null;
-      if (!step(2, "user is approved", !!u && u.status === "approved", u ? `${u.id} status ${u.status}` : "signed out")) return "not_approved";
+      if (!step(2, "user is approved", !!u && u.status === "approved" && !u.isDemo, u ? `${u.id} status ${u.status}${u.isDemo ? ", shared demo account (never live)" : ""}` : "signed out")) return "not_approved";
     }
 
     const budget = await getBudgetState(userId);
@@ -159,17 +220,41 @@ export async function callModel<P extends PurposeName>(args: {
     return "live";
   }
 
+  /** The recorded live answer for this exact input, re-validated by the purpose's own parser. */
+  function recorded(): PurposeOutput<P> | null {
+    const h = keyHash();
+    const rec = h ? lookupRecorded(args.purpose, h) : null;
+    if (!rec) return null;
+    try {
+      const raw = fromPlaceholders(rec.output, fixKey()!.askIds);
+      return spec.parse(typeof raw === "string" ? raw : JSON.stringify(raw), args.input);
+    } catch (err) {
+      log.warn(`recorded answer for ${label} hash=${h} no longer parses (${(err as Error).message}), ignoring it`, { err, recordedAt: rec.recordedAt });
+      return null;
+    }
+  }
+
   async function fallback(why: Exclude<GateOutcome, "live">, spent: ModelUsage = { inputTokens: 0, outputTokens: 0 }, errorCode: ErrorCode | null = null): Promise<ModelResult<PurposeOutput<P>>> {
     const ms = Math.round(performance.now() - t0);
-    const fixture = spec.fixture(args.input);
+    const h = keyHash();
+    const rec = recorded();
+    const kind: FixtureKind = rec ? "recorded" : "deterministic";
+    if (rec) log.info(`fixture HIT ${args.purpose} hash=${h} for ${label}: replaying the recorded live answer`, { purpose: args.purpose });
+    else if (h) {
+      log.info(`fixture MISS ${args.purpose} hash=${h} for ${label}: no recorded live answer for this input, using the deterministic demo result (pnpm fixtures:record adds it)`, { purpose: args.purpose });
+      // Diff two of these to see why an input stopped matching its recording.
+      log.trace(`fixture key ${args.purpose} hash=${h} ${JSON.stringify(normalizeForKey(spec.key!(args.input)))}`);
+    }
+    const fixture = rec ?? spec.fixture(args.input);
     // A failed live call can still have consumed tokens (bad JSON, refusal); record and price them.
     const costUsd = spent.inputTokens || spent.outputTokens ? estimateCostUsd(req.model, spent) : 0;
     await writeUsage({ outcome: why, demo: true, usage: spent, ms, costUsd, errorCode: fixture ? errorCode : (errorCode ?? "MODEL_FIXTURE_MISSING"), model: req.model });
     const modeWhy = why === "mode_demo" && typeof args.mode !== "string" ? ` (${MODE_REASON_LABEL[args.mode.reason]})` : "";
     const note = `Cached demo result: ${OUTCOME_NOTE[why]}${modeWhy}.`;
     if (fixture) {
-      log.branch(`serve demo fixture for ${label}`, OUTCOME_NOTE[why], { outcome: why });
-      return { source: "fixture", output: fixture, outcome: why, note };
+      log.branch(`serve ${kind} demo result for ${label}`, OUTCOME_NOTE[why], { outcome: why, hash: h });
+      run?.onFixture?.({ purpose: args.purpose, kind, hash: h, askIds: fixKey()?.askIds ?? [], output: fixture });
+      return { source: "fixture", output: fixture, outcome: why, note, fixture: { kind, hash: h } };
     }
     log.warn(`no demo fixture for ${label}, caller must show an empty or error state`, { outcome: why, code: "MODEL_FIXTURE_MISSING" });
     return { source: "none", output: null, outcome: why, note: `No result: ${OUTCOME_NOTE[why]} and no cached demo result exists.`, code: "MODEL_FIXTURE_MISSING" };
@@ -198,6 +283,15 @@ export async function callModel<P extends PurposeName>(args: {
       // The caller still gets its result; the missing row is loud in the log.
       log.error(`usage_log row NOT written for ${label} (outcome ${row.outcome}); spend for this call is missing from /admin/usage`, { err, tokens: row.usage.inputTokens + row.usage.outputTokens });
     }
+  }
+}
+
+/** Model text as stored in a recording: parsed JSON when it is JSON (readable diffs), else the text. */
+function asJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
   }
 }
 

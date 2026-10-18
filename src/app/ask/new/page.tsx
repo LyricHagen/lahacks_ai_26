@@ -1,16 +1,51 @@
-import { StubPage } from "@/components/stub-page";
+import Link from "next/link";
+import { Container, PageHeader } from "@/components/page-header";
+import { getPersonaSummary } from "@/lib/accounts";
+import { getAskExamples } from "@/lib/ask-examples";
+import { ASK_BODY_MAX, ASK_BODY_MIN, ASK_EXTRA_MAX } from "@/lib/asks";
+import { createLogger } from "@/lib/log";
+import { MODE_REASON_LABEL } from "@/lib/mode";
+import { currentMode } from "@/lib/mode-request";
+import { withPage } from "@/lib/request-context";
+import { getViewer } from "@/lib/viewer";
+import { Composer } from "./composer";
 
 export const metadata = { title: "New ask" };
 
-export default function Page() {
-  return (
-    <StubPage
-      name="ask.new"
-      path="/ask/new"
-      title="New ask"
-      prompt={5}
-      shape="form"
-      summary="Describe your problem in plain words. Who2Ask finds the people who can help."
-    />
-  );
+const log = createLogger("page.ask.new");
+
+export default async function Page() {
+  return withPage("ask.new", async () => {
+    const viewer = await getViewer();
+    const [examples, persona, mode] = await Promise.all([getAskExamples(), getPersonaSummary(viewer.personaId), currentMode()]);
+    log.info(`composer for ${viewer.actorId} as ${persona?.id ?? "no persona"}`, { examples: examples.length, mode: mode.mode });
+    return (
+      <Container className="max-w-3xl">
+        <PageHeader
+          eyebrow="/ask/new"
+          title="What are you stuck on?"
+          description="Write it the way you would say it to a teammate. Who2Ask finds the right person, says why, checks when they are free and drafts the message. You send it yourself."
+        />
+        <p className="mb-6 text-sm text-muted">
+          Asking as{" "}
+          {persona ? (
+            <>
+              <Link href={`/directory/${persona.id}`}>{persona.name}</Link>, {persona.title}, {persona.team}
+            </>
+          ) : (
+            "nobody yet (the company is not seeded)"
+          )}
+          {viewer.user ? null : (
+            <>
+              {" "}
+              (the demo persona; <Link href="/signup">sign up</Link> to get your own)
+            </>
+          )}
+          . <span className="font-mono text-[12px]">{mode.mode === "live" ? "Live mode" : "Demo mode"}</span>
+          <span className="text-subtle"> ({MODE_REASON_LABEL[mode.reason]})</span>
+        </p>
+        <Composer examples={examples} limits={{ bodyMin: ASK_BODY_MIN, bodyMax: ASK_BODY_MAX, extraMax: ASK_EXTRA_MAX }} />
+      </Container>
+    );
+  });
 }

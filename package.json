@@ -19,6 +19,13 @@
     "seed": "tsx --conditions=react-server scripts/seed.ts",
     "fixture:generate": "tsx --conditions=react-server scripts/generate-fixture.ts",
     "seed:check": "tsx --conditions=react-server scripts/check-scenarios.ts",
+    "retrieve:check": "tsx --conditions=react-server scripts/check-retrieval.ts",
+    "ask:check": "tsx --conditions=react-server scripts/check-ask-state.ts",
+    "rank:check": "tsx --conditions=react-server scripts/check-ranking.ts",
+    "draft:check": "tsx --conditions=react-server scripts/check-draft.ts",
+    "ramp:check": "tsx --conditions=react-server scripts/check-ramp.ts",
+    "demo:check": "tsx --require ./scripts/lib/no-server-only.cjs scripts/demo-check.ts",
+    "fixtures:record": "tsx --require ./scripts/lib/no-server-only.cjs scripts/record-fixtures.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
@@ -30,7 +37,8 @@
     "postgres": "^3.4.9",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

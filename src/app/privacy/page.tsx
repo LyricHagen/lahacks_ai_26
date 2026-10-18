@@ -25,8 +25,9 @@ export default async function PrivacyPage() {
         </p>
         <h3>Cookies</h3>
         <p>
-          Two functional cookies, both httpOnly: the session cookie that keeps you signed in (for up to seven days), and, only if you turn it on,
-          the demo mode toggle. Neither is used for tracking.
+          Up to three functional cookies, all httpOnly: the session cookie that keeps you signed in (for up to seven days); only if you turn it
+          on, the demo mode toggle; and, only if you make an ask without signing in, a random visitor id (kept 90 days) so the dashboard can show
+          that browser its own asks. None is used for tracking.
         </p>
         <h3>Sign in attempts</h3>
         <p>
@@ -34,11 +35,28 @@ export default async function PrivacyPage() {
           for one window (at most an hour) and is overwritten after that.
         </p>
         <h3>Your onboarding profile</h3>
-        <p>The team, role, start date and focus areas you enter during setup. These are used only to rank colleagues for your asks.</p>
+        <p>
+          Which synthetic colleague you play, the skills you say you already know, what you are working on first, how you prefer to reach people
+          and whether you are comfortable interrupting senior colleagues. These are used only to rank colleagues, write drafts and plan your ramp.
+          If you skip a step, defaults taken from your synthetic colleague are stored instead.
+        </p>
         <h3>Your asks</h3>
         <p>
-          The text of each problem you describe, the shortlist produced for it, the explanation, the drafted message, and the status you set
-          (for example, sent or resolved). Who2Ask does not see whether you actually sent a message, only what you mark.
+          The text of each problem you describe, what you already tried, how urgent it is, the shortlist produced for it, the explanation, the
+          drafted message, and every change of status with its time (for example, sent or answered). Who2Ask does not see whether you actually
+          sent a message, only what you mark. It never sends anything for you: it has no access to Slack, mail or calendars. If you
+          mark an ask answered you can add a one line answer; it is stored with the ask so the next person with the same question can
+          find it.
+        </p>
+        <p>
+          If you add a confidential note to an ask, it is stored only so the draft can leave it out. It is never shown to the person you ask,
+          never sent to a model, and never written to logs.
+        </p>
+        <h3>Your ramp plan</h3>
+        <p>
+          Each week&apos;s plan (the skill gaps found in your own asks and the documents, colleagues and project it points at) and the items you
+          dismissed, so later plans leave them out. The plan refers to your asks by id only, never their text. It is built only after at least
+          three of your asks got past the confirm step.
         </p>
         <h3>Usage and cost records</h3>
         <p>
@@ -66,7 +84,14 @@ export default async function PrivacyPage() {
           <li>Admins see account details, approval status and model spend per user.</li>
           <li>
             Managers see only the <a href="/insights">aggregate insights</a> view: counts and topics across all new hires, with groups smaller
-            than five suppressed. They never see an individual&apos;s asks.
+            than five suppressed. They never see an individual&apos;s asks, any text anyone typed, or who asked. The view exists only while an
+            admin has opted the org in, and that setting is shown on the page. Colleagues who were asked appear by name only when at least five
+            asks were sent to them.
+          </li>
+          <li>
+            The <a href="/demo">guided demo</a> uses one shared demo account. Anything typed while in it is visible to anyone else using the
+            demo. Every demo ask, including those made while signed out, is deleted by Reset demo. Do not type anything real there. The demo account never sends text to a
+            model provider.
           </li>
         </ul>
 
@@ -78,7 +103,7 @@ export default async function PrivacyPage() {
 
         <h2>Deleting your data</h2>
         <p>
-          Ask an admin to delete your account and everything tied to it is removed: profile, asks, drafts and usage records. Log lines age out of
+          Ask an admin to delete your account and everything tied to it is removed: profile, asks, drafts, ramp plans, dismissals and usage records. Log lines age out of
           the in-memory buffer automatically.
         </p>
 

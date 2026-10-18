@@ -2,10 +2,12 @@ import "server-only";
 // Accounts: signup, password check, persona claim, and the admin decisions on top of them.
 // Every decision logs one line that says what was decided and why.
 
+import { wallNow } from "@/lib/clock";
 import bcrypt from "bcryptjs";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb, q, qIn, type Tx } from "@/db";
 import * as t from "@/db/schema";
+import { DEMO_EMAIL, DEMO_PERSONA_KEY } from "./demo-script";
 import { AppError } from "./errors";
 import { createLogger } from "./log";
 
@@ -52,7 +54,7 @@ export type ClaimedPersona = { id: string; name: string; title: string; team: st
 /**
  * Pick an unclaimed colleague for a new account to play. Prefers the planted new hire persona
  * (newhire_*), then the most recently started junior or mid employee with a manager. Never picks
- * another planted role (overloaded, decoy, vacation, booked): those are the scenario answers and
+ * the demo persona (reserved for the demo account) or another planted role (overloaded, decoy, vacation, booked): those are the scenario answers and
  * traps. Must run inside the signup lock.
  */
 async function claimPersona(tx: Tx): Promise<{ persona: ClaimedPersona | null; tier: string }> {
@@ -63,8 +65,10 @@ async function claimPersona(tx: Tx): Promise<{ persona: ClaimedPersona | null; t
   } catch (err) {
     log.error("seed.planted in app_meta is not valid JSON, treating every employee as unplanted", { err });
   }
-  const newhire = planted.filter((p) => p.planted.startsWith("newhire")).map((p) => p.id);
-  const excluded = planted.filter((p) => !p.planted.startsWith("newhire")).map((p) => p.id);
+  // The demo persona (newhire_backend) is reserved for the shared demo account.
+  const claimable = (p: { planted: string }) => p.planted.startsWith("newhire") && p.planted !== DEMO_PERSONA_KEY;
+  const newhire = planted.filter(claimable).map((p) => p.id);
+  const excluded = planted.filter((p) => !claimable(p)).map((p) => p.id);
   const excludedSql = excluded.length ? sql`and e.id not in (${sql.join(excluded.map((id) => sql`${id}`), sql`, `)})` : sql``;
   const newhireSql = newhire.length ? sql`(e.id in (${sql.join(newhire.map((id) => sql`${id}`), sql`, `)}))` : sql`false`;
 
@@ -130,7 +134,7 @@ export async function createAccount(rawEmail: string, password: string): Promise
     if (persona) log.info(`persona ${persona.id} (${persona.name}, ${persona.team}) claimed`, { tier, managerId: persona.managerId });
     else log.warn("no unclaimed persona left in the synthetic company, account created without one", { existingUsers: n });
 
-    const now = new Date();
+    const now = wallNow();
     const [row] = await qIn(tx, "auth.signup.insert", (h) =>
       h
         .insert(t.users)
@@ -179,9 +183,57 @@ export async function verifyCredentials(rawEmail: string, password: string): Pro
     return null;
   }
   // Rejected accounts may still sign in: they see a plain "not approved" message on /pending.
-  await q("auth.login.touch", (db) => db.update(t.users).set({ lastLoginAt: new Date() }).where(eq(t.users.id, row.id)));
+  await q("auth.login.touch", (db) => db.update(t.users).set({ lastLoginAt: wallNow() }).where(eq(t.users.id, row.id)));
   log.info(`login check: accepted ${row.id} (status ${row.status})`, { userId: row.id });
   return { id: row.id, email: row.email };
+}
+
+// ---------------------------------------------------------------------------
+// the shared demo account
+// ---------------------------------------------------------------------------
+
+/** The guided demo's account, for the "demo" sign-in provider (src/lib/auth-config.ts). */
+export async function findDemoAccount(): Promise<{ id: string; email: string } | null> {
+  const rows = await q("auth.demo.find", (db) => db.select({ id: t.users.id, email: t.users.email }).from(t.users).where(eq(t.users.isDemo, true)).limit(1));
+  return rows[0] ?? null;
+}
+
+/**
+ * Create the shared demo account if it is missing, and point it at the demo persona. Its password
+ * is a hash of a random string nobody knows, so it can only be entered through the demo action.
+ * If another account somehow plays the persona, that account loses it (logged): the guided demo
+ * needs it.
+ */
+export async function ensureDemoAccount(personaId: string): Promise<{ id: string; created: boolean; relinked: boolean }> {
+  return getDb().transaction(async (tx) => {
+    await qIn(tx, "auth.demo.lock", (h) => h.execute(sql`select pg_advisory_xact_lock(${SIGNUP_LOCK_ID})`));
+    const [existing] = await qIn(tx, "auth.demo.lookup", (h) =>
+      h.select({ id: t.users.id, employeeId: t.users.employeeId, isDemo: t.users.isDemo }).from(t.users).where(sql`${t.users.isDemo} or ${t.users.email} = ${DEMO_EMAIL}`).limit(1),
+    );
+    const holder = await qIn(tx, "auth.demo.persona_holder", (h) => h.select({ id: t.users.id }).from(t.users).where(and(eq(t.users.employeeId, personaId), sql`not ${t.users.isDemo}`)));
+    for (const u of holder) {
+      log.warn(`demo persona ${personaId} was played by ${u.id}; unlinked so the demo account can play it (the persona is reserved for the guided demo)`, { userId: u.id });
+      await qIn(tx, "auth.demo.unlink", (h) => h.update(t.users).set({ employeeId: null }).where(eq(t.users.id, u.id)));
+    }
+    if (existing) {
+      const relinked = existing.employeeId !== personaId || !existing.isDemo;
+      if (relinked) {
+        await qIn(tx, "auth.demo.relink", (h) => h.update(t.users).set({ employeeId: personaId, isDemo: true, status: "approved", role: "user" }).where(eq(t.users.id, existing.id)));
+        log.info(`demo account ${existing.id} now plays ${personaId} (was ${existing.employeeId ?? "none"})`, { userId: existing.id });
+      }
+      return { id: existing.id, created: false, relinked };
+    }
+    const passwordHash = await bcrypt.hash(crypto.randomUUID(), BCRYPT_ROUNDS);
+    const [row] = await qIn(tx, "auth.demo.insert", (h) =>
+      h
+        .insert(t.users)
+        // Approved so no "pending" screens show; is_demo keeps it in demo mode (resolveMode, gate 2).
+        .values({ email: DEMO_EMAIL, passwordHash, role: "user", status: "approved", isDemo: true, employeeId: personaId, approvedAt: wallNow() })
+        .returning({ id: t.users.id }),
+    );
+    log.warn(`DEMO ACCOUNT: created ${row.id} <${DEMO_EMAIL}> playing ${personaId}; shared by everyone who enters the guided demo, always in demo mode`, { userId: row.id });
+    return { id: row.id, created: true, relinked: false };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -198,6 +250,7 @@ export type AdminUserRow = {
   lastLoginAt: Date | null;
   approvedAt: Date | null;
   approvedBy: string | null;
+  isDemo: boolean;
   rejectedAt: Date | null;
   rejectedBy: string | null;
   employeeId: string | null;
@@ -221,6 +274,7 @@ export async function listUsersForAdmin(): Promise<AdminUserRow[]> {
         lastLoginAt: t.users.lastLoginAt,
         approvedAt: t.users.approvedAt,
         approvedBy: t.users.approvedBy,
+        isDemo: t.users.isDemo,
         rejectedAt: t.users.rejectedAt,
         rejectedBy: t.users.rejectedBy,
         employeeId: t.users.employeeId,
@@ -240,11 +294,15 @@ export async function listUsersForAdmin(): Promise<AdminUserRow[]> {
 
 /** Approve or reject an account. Logs who decided, about whom, and when. */
 export async function setUserStatus(admin: { id: string; email: string }, targetId: string, status: "approved" | "rejected"): Promise<{ id: string; email: string; status: string; at: string }> {
-  const target = await q("admin.users.target", (db) => db.select({ id: t.users.id, email: t.users.email, status: t.users.status, role: t.users.role }).from(t.users).where(eq(t.users.id, targetId)).limit(1));
+  const target = await q("admin.users.target", (db) => db.select({ id: t.users.id, email: t.users.email, status: t.users.status, role: t.users.role, isDemo: t.users.isDemo }).from(t.users).where(eq(t.users.id, targetId)).limit(1));
   const row = target[0];
   if (!row) {
     log.warn(`admin decision refused: ${targetId} does not exist`, { targetId, adminId: admin.id });
     throw new AppError("USER_NOT_FOUND", undefined, { status: 404 });
+  }
+  if (row.isDemo) {
+    log.warn(`admin decision refused: ${row.id} is the shared demo account, which is always in demo mode`, { targetId: row.id, adminId: admin.id });
+    throw new AppError("BAD_REQUEST", "The demo account cannot be approved or rejected. It is always in demo mode.", { status: 400 });
   }
   if (row.id === admin.id && status === "rejected") {
     log.warn(`admin decision refused: ${admin.id} tried to reject their own account`, { adminId: admin.id });
@@ -252,9 +310,9 @@ export async function setUserStatus(admin: { id: string; email: string }, target
   }
   if (row.status === status) {
     log.skip(`set ${row.id} to ${status}`, `it is already ${status}`, { targetId: row.id });
-    return { id: row.id, email: row.email, status, at: new Date().toISOString() };
+    return { id: row.id, email: row.email, status, at: wallNow().toISOString() };
   }
-  const now = new Date();
+  const now = wallNow();
   await q("admin.users.set_status", (db) =>
     db
       .update(t.users)

@@ -1,0 +1,114 @@
+{
+  "purpose": "draft_ask",
+  "note": "Committed demo phrasing for the three message drafts. Demo mode never calls a model: src/lib/model-purposes.ts (demoDraft) fills these lines from the draft input only (the confirmed question, what was tried, the evidence, the channel and the slot), so a demo draft passes the same grounding check as a live one. {placeholders} are filled from the input; a line whose placeholder is empty is left out.",
+  "evidenceLeads": [
+    [
+      "Owns ",
+      "you own "
+    ],
+    [
+      "Is the backup owner of ",
+      "you are the backup owner of "
+    ],
+    [
+      "Is ",
+      "you are "
+    ],
+    [
+      "Was ",
+      "you were "
+    ],
+    [
+      "Answered ",
+      "you answered "
+    ],
+    [
+      "Wrote ",
+      "you wrote "
+    ],
+    [
+      "Manages ",
+      "you manage "
+    ],
+    [
+      "Leads ",
+      "you lead "
+    ]
+  ],
+  "evidenceCuts": [
+    " (",
+    ", joined ",
+    ", most recently ",
+    ", updated ",
+    " until ",
+    ", which you are on",
+    ", your department"
+  ],
+  "whyFallback": "Who2Ask suggested you for this",
+  "short": {
+    "subject": "Quick question{about}",
+    "lines": [
+      "Hi {first}, quick question{about}.",
+      "{question}",
+      "{triedShort}",
+      "{askShort}"
+    ]
+  },
+  "full": {
+    "subject": "Question{about}, {urgencyLower}",
+    "lines": [
+      "Hi {first},",
+      "",
+      "I'm {askerFirst} ({askerTitle}, {askerTeam} team{daysIn}). I'm reaching out because {why}.",
+      "",
+      "What I'm doing: {focus}",
+      "What I tried: {triedFull}",
+      "My question: {question}",
+      "What I'm asking for: {askFull}",
+      "",
+      "Thanks,",
+      "{askerFirst}"
+    ]
+  },
+  "call": {
+    "subject": "15 minutes{about}?",
+    "lines": [
+      "Hi {first}, {slotAsk}",
+      "",
+      "The question up front, in case a text answer is quicker: {question}",
+      "{triedShort}",
+      "",
+      "If a reply in text is easier for you, that works just as well."
+    ]
+  },
+  "tried": {
+    "short": "I already tried this: {tried}",
+    "fullNone": "nothing yet, I wanted to check with you first."
+  },
+  "slotAsk": {
+    "slot": "could we do 15 minutes at {slot}?",
+    "none": "could we find 15 minutes in the next few days?"
+  },
+  "asks": {
+    "dm": {
+      "short": "I'm blocked on this right now. Do you have 10 minutes today?",
+      "full": "10 minutes today, by DM or a quick call, if you have them. I'm blocked until this is sorted."
+    },
+    "call": {
+      "short": "I'm blocked on this right now. Could we do a 10 minute call today?",
+      "full": "A 10 minute call today, if you have it. I'm blocked until this is sorted."
+    },
+    "async_blocked_now": {
+      "short": "I'm blocked on this, so a reply when you are free would really help. No need to step out of anything.",
+      "full": "A reply in text when you are free. I'm blocked, but it can wait until you are out of what you are in."
+    },
+    "async_blocked_today": {
+      "short": "No need to drop anything: a reply sometime today is plenty.",
+      "full": "A reply in text sometime today, no call needed."
+    },
+    "async_curious": {
+      "short": "No rush at all, this is not blocking me. A reply whenever suits you is perfect.",
+      "full": "A reply whenever suits you. It is not blocking me."
+    }
+  }
+}

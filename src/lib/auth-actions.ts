@@ -15,6 +15,7 @@ import { createLogger } from "./log";
 import { MODE_COOKIE } from "./mode";
 import { currentMode } from "./mode-request";
 import { callModel } from "./model";
+import { needsOnboarding } from "./onboarding";
 import { enforceRateLimit } from "./rate-limit";
 import { withAction } from "./request-context";
 
@@ -43,10 +44,12 @@ async function startSession(email: string, password: string): Promise<void> {
   }
 }
 
-function destinationFor(status: string, role: string, next: string | null): { to: string; why: string } {
+function destinationFor(status: string, role: string, next: string | null, onboard: boolean): { to: string; why: string } {
   if (status === "rejected") return { to: "/pending", why: "account was rejected" };
+  if (next) return { to: next, why: `${status}, returning to the page that sent them to login` };
+  // Shown once: on first use (pending accounts work in demo mode meanwhile) and after approval.
+  if (onboard) return { to: "/onboarding/role", why: `${status}, onboarding not finished or skipped yet` };
   if (status === "pending") return { to: "/pending", why: "account is pending approval" };
-  if (next) return { to: next, why: "approved, returning to the page that sent them to login" };
   if (role === "admin") return { to: "/admin/users", why: "approved admin, no next page" };
   return { to: "/dashboard", why: "approved, no next page" };
 }
@@ -56,7 +59,7 @@ export const loginAction = withAction("auth.login", async (input: { email: strin
   const email = normalizeEmail(input.email ?? "");
   await startSession(email, input.password ?? "");
   const [row] = await q("auth.login.after", (db) => db.select({ id: t.users.id, status: t.users.status, role: t.users.role }).from(t.users).where(eq(t.users.email, email)).limit(1));
-  const { to, why } = destinationFor(row.status, row.role, safeNext(input.next));
+  const { to, why } = destinationFor(row.status, row.role, safeNext(input.next), await needsOnboarding(row.id));
   log.info(`auth decision: login ok for ${row.id} (status ${row.status}, role ${row.role}), send to ${to} because ${why}`, { userId: row.id });
   return { to, status: row.status };
 });
@@ -65,7 +68,7 @@ export const signupAction = withAction("auth.signup", async (input: { email: str
   await enforceRateLimit("signup");
   const created = await createAccount(input.email ?? "", input.password ?? "");
   await startSession(created.email, input.password);
-  const { to, why } = destinationFor(created.status, created.role, null);
+  const { to, why } = destinationFor(created.status, created.role, null, true);
   log.info(`auth decision: signup ok for ${created.id} (status ${created.status}, role ${created.role}), send to ${to} because ${why}`, { userId: created.id });
   return { to, status: created.status, role: created.role, adminReason: created.adminReason, personaId: created.persona?.id ?? null };
 });

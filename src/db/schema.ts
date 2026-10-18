@@ -260,6 +260,8 @@ export const users = pgTable(
     approvedBy: text("approved_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
     rejectedAt: timestamp("rejected_at", { withTimezone: true }),
     rejectedBy: text("rejected_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+    /** The shared guided demo account (src/lib/demo.ts). Always demo mode, never a model call. */
+    isDemo: boolean("is_demo").notNull().default(false),
   },
   // One account per persona, so two people never act as the same colleague.
   (t) => [uniqueIndex("users_employee_idx").on(t.employeeId).where(sql`${t.employeeId} is not null`)],
@@ -306,11 +308,44 @@ export const rateLimits = pgTable("rate_limits", {
   count: integer("count").notNull().default(0),
 });
 
+export const contactChannelEnum = pgEnum("contact_channel", ["slack", "email", "call"]);
+
+/**
+ * What a new hire told us in /onboarding. One row per account, written step by step; skipping
+ * fills the defaults (see src/lib/onboarding.ts). Deleted with the account (promise in /privacy).
+ */
+export const userProfiles = pgTable("user_profiles", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** Skill ids the new hire does not need explained. Ranking and the ramp plan read this. */
+  knownSkillIds: text("known_skill_ids").array().notNull().default(sql`'{}'::text[]`),
+  /** What they are working on first, in their own words. */
+  firstFocus: text("first_focus").notNull().default(""),
+  preferredChannel: contactChannelEnum("preferred_channel").notNull().default("slack"),
+  /** False means: prefer peers and async messages before interrupting someone senior. */
+  okToInterruptSeniors: boolean("ok_to_interrupt_seniors").notNull().default(false),
+  roleConfirmedAt: timestamp("role_confirmed_at", { withTimezone: true }),
+  contextAt: timestamp("context_at", { withTimezone: true }),
+  channelsAt: timestamp("channels_at", { withTimezone: true }),
+  /** Set when the last step is saved, or when the user skips the rest. */
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  /** True when any step was skipped and defaults were used for it. */
+  usedDefaults: boolean("used_defaults").notNull().default(false),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ---------------------------------------------------------------------------
 // asks
 // ---------------------------------------------------------------------------
 
-export const askStatusEnum = pgEnum("ask_status", ["draft", "ranked", "drafted", "sent", "resolved", "cancelled"]);
+/**
+ * The ask lifecycle. The order and the allowed transitions live in src/lib/ask-state.ts; keep this
+ * list identical to ASK_STATES there. Every change goes through transitionAsk, never a bare update.
+ */
+export const askStateEnum = pgEnum("ask_state", ["draft", "understanding", "confirming", "retrieving", "ranking", "shortlist", "drafting", "ready", "sent", "answered", "stale", "abandoned"]);
+/** blocked_now prefers a quick call or a direct ping; curious prefers an asynchronous message. */
+export const askUrgencyEnum = pgEnum("ask_urgency", ["blocked_now", "blocked_today", "curious"]);
 export const askSourceEnum = pgEnum("ask_source", ["seed", "user", "demo"]);
 /** Seeded asks use ids below 1000; asks created in the app start at ask_1000. */
 export const askIdSeq = pgSequence("ask_id_seq", { startWith: 1000 });
@@ -329,15 +364,61 @@ export const asks = pgTable(
     body: text("body").notNull(),
     /** What the asker already tried; goes into the draft. */
     tried: text("tried"),
-    status: askStatusEnum("status").notNull().default("draft"),
+    urgency: askUrgencyEnum("urgency").notNull().default("blocked_today"),
+    /** What must stay out of the draft. Never logged (redacted by key name) and never sent to a model. */
+    confidential: text("confidential"),
+    status: askStateEnum("status").notNull().default("draft"),
     source: askSourceEnum("source").notNull().default("user"),
+    /**
+     * Signed-out visitors own their asks through the httpOnly w2a_visitor cookie, so the dashboard
+     * can list them. Null for asks made by an account.
+     */
+    visitorId: text("visitor_id"),
+    /**
+     * What the understanding step found, after the user's corrections: restatement, services,
+     * skills, artifacts, kind of help, sensitive spans. Shape: Understanding in src/lib/understanding.ts.
+     */
+    understanding: jsonb("understanding"),
+    /** Per retrieval path: query, rows, people, ms; written as each path finishes so the page can show counts live. */
+    retrieval: jsonb("retrieval"),
+    /**
+     * What ranking decided, beyond the per-candidate rows: top id and time (the 24 hour cooldown
+     * reads these), guardrail reports, the why-not line, how the reasons were written. Shape:
+     * RankingSummary in src/lib/ask-rank-step.ts.
+     */
+    ranking: jsonb("ranking"),
+    /** The ask embedded with the same local model as the company (src/lib/embed.ts). */
+    embedding: vector("embedding", { dimensions: EMBEDDING_DIMS }),
+    /** Live status line for the processing states ("searching 200 people"), polled by /ask/[askId]. */
+    progress: text("progress"),
+    progressAt: timestamp("progress_at", { withTimezone: true }),
+    /** Set while a request is running the pipeline, so two tabs never run it twice. */
+    runLeaseUntil: timestamp("run_lease_until", { withTimezone: true }),
+    /** Code of the last failed processing step (shown on the ask page with its request id). */
+    lastErrorCode: text("last_error_code"),
+    lastErrorReqId: text("last_error_req_id"),
     /** The colleague the ask ended up with. Counts toward their weekly ask load. */
     routedToId: text("routed_to_id").references(() => employees.id, { onDelete: "cascade" }),
+    /**
+     * What the drafting step used and decided: the scrubbed input payload, the recipient, the
+     * suggested variant and format, the grounding check per variant, how the text was written.
+     * Shape: DraftSummary in src/lib/ask-draft-step.ts.
+     */
+    draft: jsonb("draft"),
+    /** When the asker said "I sent this" (wall time), and the app time at that moment (for the follow-up horizon). */
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    sentAppAt: timestamp("sent_app_at", { withTimezone: true }),
+    /** person (a colleague replied) or document (a doc answered it at the confirm step). Feeds /insights. */
+    answeredVia: text("answered_via"),
+    /** The one line the asker wrote about the answer, optional. Feeds /insights. */
+    answerNote: text("answer_note"),
+    answeredById: text("answered_by_id").references(() => employees.id, { onDelete: "set null" }),
+    answeredDocId: text("answered_doc_id").references(() => documents.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
   },
-  (t) => [index("asks_routed_idx").on(t.routedToId, t.createdAt), index("asks_user_idx").on(t.userId, t.createdAt)],
+  (t) => [index("asks_routed_idx").on(t.routedToId, t.createdAt), index("asks_user_idx").on(t.userId, t.createdAt), index("asks_visitor_idx").on(t.visitorId, t.createdAt)],
 );
 
 export const askCandidates = pgTable(
@@ -349,15 +430,52 @@ export const askCandidates = pgTable(
     employeeId: text("employee_id")
       .notNull()
       .references(() => employees.id, { onDelete: "cascade" }),
-    rank: smallint("rank").notNull(),
-    score: real("score").notNull(),
-    /** Full score breakdown (every signal, weight and penalty) so a bad ranking can be debugged from SQL. */
-    breakdown: jsonb("breakdown").notNull(),
+    /** Shortlist position (1 is the top suggestion); null for people ranking did not shortlist. */
+    rank: smallint("rank"),
+    score: real("score"),
+    /**
+     * After ranking: { stage: "ranked", features (raw 0..1 and detail per component), contributions,
+     * score, relevance, excluded, flags, reasonSource }. The shortlist re-ranks from features on the
+     * client, so a bad ranking can be rebuilt from SQL alone.
+     */
+    breakdown: jsonb("breakdown").notNull().default(sql`'{}'::jsonb`),
+    /** Retrieval paths that brought this person in (ownership, history, skill, semantic, authorship). */
+    sources: text("sources").array().notNull().default(sql`'{}'::text[]`),
+    /** Evidence items {kind, detail, source, recencyDays}; detail is a sentence a person would say. */
+    evidence: jsonb("evidence").notNull().default(sql`'[]'::jsonb`),
     explanation: text("explanation"),
     chosen: boolean("chosen").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.askId, t.employeeId] })],
+);
+
+/**
+ * Documents offered before searching people ("the best ask is the one nobody has to answer"), and
+ * what the asker said about each. verdict null means not judged yet; not_answered is the signal
+ * the insights page uses to find docs that fail new hires.
+ */
+export const askDocChecks = pgTable(
+  "ask_doc_checks",
+  {
+    askId: text("ask_id")
+      .notNull()
+      .references(() => asks.id, { onDelete: "cascade" }),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    rank: smallint("rank").notNull(),
+    score: real("score").notNull(),
+    /** The paragraph quoted on screen. */
+    section: text("section").notNull(),
+    /** Why the doc matched, as a sentence ("about billing-service, shares the words stripe, webhook"). */
+    why: text("why").notNull(),
+    /** answered or not_answered; null until the asker says. */
+    verdict: text("verdict"),
+    verdictAt: timestamp("verdict_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.askId, t.documentId] }), index("ask_doc_checks_doc_idx").on(t.documentId, t.verdict)],
 );
 
 export const askMessageStatusEnum = pgEnum("ask_message_status", ["draft", "copied", "marked_sent"]);
@@ -372,17 +490,24 @@ export const askMessages = pgTable(
     recipientId: text("recipient_id")
       .notNull()
       .references(() => employees.id, { onDelete: "cascade" }),
-    /** slack or email. The human sends it; we only store the draft. */
+    /** slack, email or invite: the format shown. The human sends it; we only store the draft. */
     channel: text("channel").notNull(),
+    /** short, full or call (src/lib/draft.ts). One row per variant. */
+    variant: text("variant").notNull().default("short"),
     subject: text("subject"),
     body: text("body").notNull(),
+    /** What the drafting step wrote, before the asker's edits. */
+    originalSubject: text("original_subject"),
+    originalBody: text("original_body"),
+    /** live (model), demo (committed fixture) or template (no result, built from the input). */
+    source: text("source").notNull().default("template"),
     status: askMessageStatusEnum("status").notNull().default("draft"),
     slotStart: timestamp("slot_start", { withTimezone: true }),
     slotEnd: timestamp("slot_end", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("ask_messages_ask_idx").on(t.askId)],
+  (t) => [index("ask_messages_ask_idx").on(t.askId), uniqueIndex("ask_messages_variant_idx").on(t.askId, t.variant)],
 );
 
 export const askEvents = pgTable(
@@ -392,10 +517,76 @@ export const askEvents = pgTable(
     askId: text("ask_id")
       .notNull()
       .references(() => asks.id, { onDelete: "cascade" }),
-    /** created, ranked, drafted, copied, marked_sent, resolved, cancelled, ... */
-    kind: text("kind").notNull(),
+    /** "transition" for every state change (written by transitionAsk); other kinds (copied, ...) are notes. */
+    kind: text("kind").notNull().default("transition"),
+    /** Null for the row that creates the ask. */
+    fromState: askStateEnum("from_state"),
+    toState: askStateEnum("to_state"),
+    /** user or system. */
+    actor: text("actor").notNull().default("system"),
+    /** usr_N when a signed-in user acted, visitor for a signed-out one, null for the system. */
+    actorId: text("actor_id"),
+    reason: text("reason").notNull().default(""),
+    reqId: text("req_id"),
     data: jsonb("data"),
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("ask_events_ask_idx").on(t.askId, t.at)],
+);
+
+// ---------------------------------------------------------------------------
+// ramp plan (prompt 9)
+// ---------------------------------------------------------------------------
+
+/**
+ * One weekly ramp plan per owner (an account, or a signed-out visitor) per week. Built once per
+ * week from the owner's ask history and the seeded company (one ramp_plan model call), and built
+ * again only when that history changes (signature). Shape of plan: RampPlan in src/lib/ramp-types.ts.
+ * Rebuilt by the seed (it points at seeded rows).
+ */
+export const rampPlans = pgTable(
+  "ramp_plans",
+  {
+    id: serial("id").primaryKey(),
+    /** usr_N or vis_... : whose plan this is. */
+    owner: text("owner").notNull(),
+    /** Deleting the account deletes its plans (promise in /privacy). */
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+    visitorId: text("visitor_id"),
+    employeeId: text("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    /** Monday of the plan's week, in the asker's zone, in app time. */
+    weekStart: date("week_start").notNull(),
+    /** Hash of the inputs (asks, dismissals, profile). A different signature means rebuild. */
+    signature: text("signature").notNull(),
+    /** ready, or not_enough_history (the honest empty state). */
+    status: text("status").notNull(),
+    /** live (model), demo (committed fixture) or template (no result). */
+    source: text("source").notNull(),
+    plan: jsonb("plan").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("ramp_plans_owner_week_idx").on(t.owner, t.weekStart)],
+);
+
+/** An item the owner dismissed. Later plans leave the row out and lower the skill it was for. */
+export const rampDismissals = pgTable(
+  "ramp_dismissals",
+  {
+    id: serial("id").primaryKey(),
+    owner: text("owner").notNull(),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+    visitorId: text("visitor_id"),
+    /** learn, stretch or meet. */
+    section: text("section").notNull(),
+    /** The row the item pointed at: doc_..., emp_..., prj_... */
+    refId: text("ref_id").notNull(),
+    /** The skill gap the item was for, if any. */
+    skillId: text("skill_id"),
+    /** The plan week it was dismissed from. */
+    weekStart: date("week_start").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("ramp_dismissals_owner_ref_idx").on(t.owner, t.refId)],
 );

@@ -28,7 +28,7 @@ export function formatTime(d: Date): string {
 // ---------------------------------------------------------------------------
 
 const SECRET_KEY_NAMES =
-  /^(password|passwd|pass|secret|token|apikey|api_key|apiKey|authorization|auth|cookie|set-cookie|session|sessionToken|accessToken|refreshToken|privateKey|private_key|client_secret|clientSecret)$/i;
+  /^(password|passwd|pass|secret|token|apikey|api_key|apiKey|authorization|auth|cookie|set-cookie|session|sessionToken|accessToken|refreshToken|privateKey|private_key|client_secret|clientSecret|confidential|sensitive)$/i;
 
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
   // Anthropic, OpenAI and similar "sk-" keys
@@ -65,7 +65,8 @@ export function redactValue(value: unknown, depth = 0): unknown {
 export function redactString(s: string, knownSecrets: readonly string[] = []): string {
   let out = s;
   for (const secret of knownSecrets) {
-    if (secret.length >= 8) out = out.split(secret).join("[REDACTED_ENV]");
+    // Env secrets are already 8+ characters (log.ts); per-request sensitive values may be shorter.
+    if (secret.length >= 3) out = out.split(secret).join("[REDACTED_VALUE]");
   }
   for (const [re, replacement] of SECRET_PATTERNS) out = out.replace(re, replacement);
   return out;

@@ -29,6 +29,55 @@
       "when": 1792273612034,
       "tag": "0003_auth_gate",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792275115560,
+      "tag": "0004_ask_lifecycle_onboarding",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792275898154,
+      "tag": "0005_drop_ask_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792277432918,
+      "tag": "0006_confirming_retrieval",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792279055749,
+      "tag": "0007_rank_shortlist",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792281349592,
+      "tag": "0008_draft_send_outcome",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792282815300,
+      "tag": "0009_ramp_plan",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792296791474,
+      "tag": "0010_demo_account",
+      "breakpoints": true
     }
   ]
 }

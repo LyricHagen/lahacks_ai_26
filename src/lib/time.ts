@@ -52,7 +52,13 @@ export function addDays(isoDate: string, n: number): string {
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
-export function todayIso(now = new Date()): string {
+/** Whole calendar days from one YYYY-MM-DD to another (negative when `to` is earlier). */
+export function daysBetween(from: string, to: string): number {
+  return Math.round((Date.UTC(+to.slice(0, 4), +to.slice(5, 7) - 1, +to.slice(8, 10)) - Date.UTC(+from.slice(0, 4), +from.slice(5, 7) - 1, +from.slice(8, 10))) / 86_400_000);
+}
+
+/** The UTC calendar date of an instant. Pass a time from src/lib/clock.ts. */
+export function todayIso(now: Date): string {
   return now.toISOString().slice(0, 10);
 }
 

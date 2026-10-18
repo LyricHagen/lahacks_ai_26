@@ -6,7 +6,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
   console.error(`[global-error] ${error.name}: ${error.message}`, error.digest ?? "", error.stack ?? "");
   return (
     <html lang="en">
-      <body style={{ fontFamily: "system-ui, sans-serif", padding: 32, background: "#f5f4f1", color: "#1c1b19" }}>
+      <body style={{ fontFamily: "system-ui, sans-serif", padding: 32, background: "#f4f5f8", color: "#171922" }}>
         <p style={{ fontWeight: 600 }}>Error: the app failed to load.</p>
         <p style={{ fontFamily: "monospace", fontSize: 12 }}>code CLIENT_RENDER {error.digest ? `digest ${error.digest}` : ""}</p>
         <button type="button" onClick={reset} style={{ marginTop: 16, padding: "6px 12px", border: "1px solid #a9a59c", background: "#fbfaf8" }}>

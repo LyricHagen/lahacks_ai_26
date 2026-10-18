@@ -2,6 +2,7 @@
 // Browser-side session log: client log lines plus `_debug` lines from server responses, in
 // arrival order (newest last). Persisted to sessionStorage so /debug shows the whole tab session.
 
+import { wallNow } from "@/lib/clock";
 import { useSyncExternalStore } from "react";
 
 export type DebugEntry = { id: number; source: "client" | "server"; line: string };
@@ -92,7 +93,7 @@ export function useDebugState(): State {
 /** Plain text for pasting into a chat: a header line, then one log line per row. */
 export function toPlainText(entries: readonly DebugEntry[], label: string): string {
   const where = typeof window !== "undefined" ? window.location.pathname + window.location.search : "";
-  const header = `# Who2Ask log, ${label}, ${entries.length} lines, page ${where}, copied ${new Date().toISOString()}`;
+  const header = `# Who2Ask log, ${label}, ${entries.length} lines, page ${where}, copied ${wallNow().toISOString()}`;
   return [header, ...entries.map((e) => e.line)].join("\n");
 }
 

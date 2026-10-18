@@ -3,6 +3,14 @@
 import { useState } from "react";
 import { ApiError, apiFetch } from "@/lib/api-client";
 import { createLogger } from "@/lib/client-log";
+import { ASK_STATES } from "@/lib/ask-state";
+import type { StripSegment, WeekStripData } from "@/lib/availability-types";
+import { AskProgress } from "../ask/ask-progress";
+import { NotBuiltPanel } from "../ask/not-built";
+import { RecommendationBox } from "../availability/recommendation";
+import { WeekStrip, WeekStripSkeleton } from "../availability/week-strip";
+import { BarList, ConcentrationCurve, Suppressed, WeekLine } from "../charts";
+import { AskStateBadge } from "../ask/state-badge";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardBody, CardFooter, CardHeader } from "../ui/card";
@@ -14,6 +22,33 @@ import { TBody, TD, TH, THead, TR, Table } from "../ui/table";
 import { useToast } from "../ui/toast";
 
 const log = createLogger("debug.ui");
+
+/** A fixed sample week (no clock): Monday half past, a focus morning, an absence on Thursday. */
+const SAMPLE_STRIP: WeekStripData = (() => {
+  const day = (pattern: string): StripSegment[] => [...pattern].map((c) => (c === "h" ? "hard" : c === "s" ? "soft" : "free"));
+  const mk = (i: number, wd: string, pattern: string | null, extra: Partial<WeekStripData["days"][number]> = {}) => {
+    const segments = pattern ? day(pattern) : [];
+    const n = (k: StripSegment) => segments.filter((x) => x === k).length * 30;
+    return { date: `2026-10-${19 + i}`, weekdayShort: wd, dayOfMonth: String(19 + i), today: i === 0, weekend: false, ooo: false, segments, pastSegments: 0, hardMinutes: n("hard"), softMinutes: n("soft"), freeMinutes: n("free"), ...extra };
+  };
+  return {
+    employeeId: "emp_113",
+    tz: "America/Los_Angeles",
+    zoneLabel: "Pacific",
+    startMin: 540,
+    endMin: 1050,
+    segmentMinutes: 30,
+    days: [
+      mk(0, "Mon", "fhssssffhhfssssff", { pastSegments: 3 }),
+      mk(1, "Tue", "fhffhhffffhffffff"),
+      mk(2, "Wed", "hhhhhhhffhhhhhhhh"),
+      mk(3, "Thu", null, { ooo: true }),
+      mk(4, "Fri", "fhssssfffffffffff"),
+      mk(5, "Sat", null, { weekend: true }),
+      mk(6, "Sun", null, { weekend: true }),
+    ],
+  };
+})();
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -139,10 +174,57 @@ export function UiGallery() {
         )}
       </Section>
 
+      <Section title="Availability">
+        <div className="grid gap-6 sm:grid-cols-2">
+          <WeekStrip data={SAMPLE_STRIP} />
+          <WeekStripSkeleton />
+        </div>
+        <div className="mt-4 grid gap-3">
+          <RecommendationBox
+            personId="emp_113"
+            rec={{ rule: "blocked_now_free_within_hour", channel: "dm", targetId: "emp_113", targetName: "Sophia Mitchell", headline: "DM Sophia asking for 10 minutes", reason: "You are blocked right now and Sophia is free now (today, 10:20 Pacific (10:20 their time)), so a short DM asking for 10 minutes gets you unblocked without a long wait." }}
+          />
+          <RecommendationBox
+            personId="emp_113"
+            rec={{ rule: "curious_async", channel: "async", targetId: "emp_113", targetName: "Sophia Mitchell", headline: "Send Sophia an async Slack message", reason: "You are not blocked, so an async message is the right ask: it does not take any of Sophia's time until they choose to answer, and nobody is interrupted." }}
+          />
+        </div>
+      </Section>
+
+      <Section title="Charts (insights)">
+        <div className="grid gap-6">
+          <BarList
+            items={[
+              { key: "a", label: "billing-service", value: 16, display: 16, title: "billing-service: 16 asks" },
+              { key: "b", label: "mobile-ci", value: 13, display: 13, title: "mobile-ci: 13 asks" },
+              { key: "c", label: "auth-gateway (under 5 asks)", value: null, display: null, title: "auth-gateway: not enough data" },
+            ]}
+          />
+          <WeekLine label="Asks per week, with one week suppressed." points={[{ label: "Sep 28", value: 51 }, { label: "Oct 5", value: null }, { label: "Oct 12", value: 74 }]} />
+          <ConcentrationCurve curve={[0, 0.09, 0.17, 0.25, 0.4, 0.55, 0.7, 0.85, 1]} people={200} marks={[{ at: 3, label: "top 3: 25%" }]} />
+          <p className="text-sm">
+            A suppressed cell reads: <Suppressed /> or <Suppressed short />
+          </p>
+        </div>
+      </Section>
+
       <Section title="States">
         <div className="grid gap-4">
           <EmptyState title="No asks yet" body="Describe a problem to get your first shortlist." action={<Button variant="primary">New ask</Button>} />
           <ErrorState title="Ranking took too long" code="RANK_TIMEOUT" reqId="req_8f3a1c" body="Try again, or narrow the ask." />
+        </div>
+      </Section>
+
+      <Section title="Ask lifecycle">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
+          <div className="flex flex-wrap gap-2">
+            {ASK_STATES.map((st) => (
+              <AskStateBadge key={st} state={st} />
+            ))}
+          </div>
+          <AskProgress state="retrieving" />
+          <AskProgress state="stale" />
+          <NotBuiltPanel state="shortlist" />
         </div>
       </Section>
 

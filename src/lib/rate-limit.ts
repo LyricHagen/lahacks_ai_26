@@ -2,6 +2,7 @@ import "server-only";
 // Per-IP fixed-window rate limits for signup and login, counted in Postgres (rate_limits) so they
 // hold across serverless instances. One upsert per attempt.
 
+import { wallMs } from "@/lib/clock";
 import { sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { q } from "@/db";
@@ -13,6 +14,12 @@ const log = createLogger("auth.ratelimit");
 export const RATE_LIMITS = {
   signup: { limit: 5, windowS: 60 * 60 },
   login: { limit: 10, windowS: 15 * 60 },
+  /** New asks, signed in or not, so a public demo cannot be used to fill the database. */
+  ask: { limit: 30, windowS: 60 * 60 },
+  /** Reset demo wipes every demo ask, so a public page cannot hammer it. Plenty for a day of judging. */
+  demo_reset: { limit: 60, windowS: 60 * 60 },
+  /** Entering the demo signs in to the shared demo account. */
+  demo_enter: { limit: 120, windowS: 60 * 60 },
 } as const;
 
 export type RateBucket = keyof typeof RATE_LIMITS;
@@ -38,7 +45,7 @@ export async function enforceRateLimit(bucket: RateBucket): Promise<void> {
       returning count, window_start`),
   );
   const count = Number(rows[0]?.count ?? 1);
-  const resetsAt = new Date(new Date(rows[0]?.window_start ?? Date.now()).getTime() + windowS * 1000);
+  const resetsAt = new Date(new Date(rows[0]?.window_start ?? wallMs()).getTime() + windowS * 1000);
   if (count > limit) {
     log.warn(`rate limit: deny ${bucket} from ${ip} (${count} attempts, limit ${limit} per ${windowS}s, resets ${resetsAt.toISOString()})`, { bucket, ip, count, limit });
     throw new AppError("RATE_LIMITED", undefined, { status: 429, context: { bucket, resetsAt: resetsAt.toISOString() } });

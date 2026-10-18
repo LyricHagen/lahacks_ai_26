@@ -4,6 +4,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { getPersonaSummary } from "@/lib/accounts";
 import { requireUser } from "@/lib/auth";
 import { createLogger } from "@/lib/log";
+import { needsOnboarding } from "@/lib/onboarding";
 import { withPage } from "@/lib/request-context";
 
 export const metadata = { title: "Waiting for approval" };
@@ -27,7 +28,7 @@ export default async function Page() {
       );
     }
 
-    const persona = await getPersonaSummary(user.employeeId);
+    const [persona, onboard] = await Promise.all([getPersonaSummary(user.employeeId), needsOnboarding(user.id)]);
     const approved = user.status === "approved";
     log.branch(approved ? "show approved state" : "show pending state", `${user.id} status ${user.status}`);
 
@@ -67,13 +68,18 @@ export default async function Page() {
         </dl>
 
         <div className="mt-8 flex flex-wrap gap-3">
+          {onboard ? (
+            <ButtonLink href="/onboarding" variant="primary">
+              Set up your profile
+            </ButtonLink>
+          ) : null}
           {approved ? (
-            <ButtonLink href="/dashboard" variant="primary">
+            <ButtonLink href="/dashboard" variant={onboard ? "secondary" : "primary"}>
               Go to the dashboard
             </ButtonLink>
           ) : (
-            <ButtonLink href="/demo" variant="primary">
-              Open the demo
+            <ButtonLink href="/ask/new" variant={onboard ? "secondary" : "primary"}>
+              Try an ask in demo mode
             </ButtonLink>
           )}
           <ButtonLink href="/account">Account</ButtonLink>

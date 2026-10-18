@@ -1,4 +1,4 @@
-// Hand-authored structure of the synthetic company, Corvid Systems.
+// Hand-authored structure of the synthetic company, Ferndale Systems.
 //
 // The generator (src/seed/generate.ts) fills these slots with people chosen by the seed string,
 // so a different seed changes names, tenures and calendars but keeps the structure the ranking
@@ -8,11 +8,11 @@
 import type { Zone } from "@/lib/time";
 
 export const ORG = {
-  id: "org_corvid",
-  name: "Corvid Systems",
-  domain: "corvid.example",
+  id: "org_ferndale",
+  name: "Ferndale Systems",
+  domain: "ferndale.example",
   description:
-    "Corvid builds freight software: shippers book loads, track shipments and pay carriers in one place. About 200 people across eight departments, in Pacific, Eastern and London time.",
+    "Ferndale builds freight software: shippers book loads, track shipments and pay carriers in one place. About 200 people across eight departments, in Pacific, Eastern and London time.",
 };
 
 // ---------------------------------------------------------------------------
@@ -225,7 +225,7 @@ export const PLANTED: PlantedDef[] = [
     level: 1,
     decoySkills: [
       { skillId: "skl_stripe_api", proficiency: 4, evidence: "Listed in their profile from a side project; they have never committed to billing-service." },
-      { skillId: "skl_payments", proficiency: 3, evidence: "Listed in their profile; no payments work at Corvid so far." },
+      { skillId: "skl_payments", proficiency: 3, evidence: "Listed in their profile; no payments work at Ferndale so far." },
     ],
     bioHook: "Built a Stripe checkout and Stripe webhooks for a side project and lists Stripe API and payments in their profile.",
   },
@@ -242,7 +242,7 @@ export const PLANTED: PlantedDef[] = [
     kind: "decoy",
     team: "ml",
     level: 1,
-    decoySkills: [{ skillId: "skl_kubernetes", proficiency: 4, evidence: "Listed in their profile after a Kubernetes certification course; they have no access to the Corvid clusters." }],
+    decoySkills: [{ skillId: "skl_kubernetes", proficiency: 4, evidence: "Listed in their profile after a Kubernetes certification course; they have no access to the Ferndale clusters." }],
     bioHook: "Recently passed a Kubernetes certification, runs a Kubernetes cluster at home for fun, and lists Kubernetes, kubectl, Helm and debugging pods in their profile.",
   },
   {
@@ -259,7 +259,7 @@ export const PLANTED: PlantedDef[] = [
     team: "web",
     level: 2,
     decoySkills: [
-      { skillId: "skl_swift", proficiency: 4, evidence: "Listed in their profile from a hobby iOS app; no Swift work at Corvid." },
+      { skillId: "skl_swift", proficiency: 4, evidence: "Listed in their profile from a hobby iOS app; no Swift work at Ferndale." },
       { skillId: "skl_ios_release", proficiency: 3, evidence: "Listed in their profile; they publish a personal app with Xcode and fastlane but have never touched mobile-ci." },
     ],
     bioHook: "Publishes a personal iOS app with Xcode and fastlane on weekends and lists Swift and iOS release builds in their profile.",
@@ -301,31 +301,31 @@ const svc = (key: string, name: string, repo: string, team: string, description:
 });
 
 export const SERVICES: ServiceDef[] = [
-  svc("billing", "billing-service", "corvid/billing-service", "payments", "Charges shippers, applies credits and handles Stripe webhooks.", ["payments", "stripe_api", "go", "postgres"], "planted:over_payments", "ic:0"),
-  svc("invoicing", "invoice-worker", "corvid/invoice-worker", "payments", "Renders monthly invoices to PDF and emails them to finance contacts.", ["invoicing", "go", "email_delivery"], "ic:1", "planted:over_payments"),
-  svc("auth", "auth-gateway", "corvid/auth-gateway", "identity", "Login, SSO (SAML and OIDC), session tokens and password resets for every app.", ["oauth_sso", "go", "redis"], "planted:vac_auth", "ic:0"),
-  svc("profiles", "profile-api", "corvid/profile-api", "identity", "User and organization profiles, roles and permissions.", ["permissions", "go", "postgres"], "ic:1", "ic:2"),
-  svc("mobile_build", "mobile-ci", "corvid/mobile-ci", "mobile", "Builds, signs and ships the iOS and Android apps.", ["ios_release", "android_release", "ci_cd"], "planted:over_mobile", "ic:0"),
-  svc("push", "push-notify", "corvid/push-notify", "mobile", "Sends push notifications through APNs and FCM.", ["push", "kotlin", "swift"], "ic:1", "planted:over_mobile"),
-  svc("web_app", "web", "corvid/web", "web", "The shipper-facing web application.", ["typescript", "react", "graphql"], "ic:0", "ic:1"),
-  svc("ui_kit", "ui-kit", "corvid/ui-kit", "web", "Shared React components and design tokens.", ["design_systems", "react", "accessibility"], "ic:2", "ic:3"),
-  svc("flags", "flagd", "corvid/flagd", "growth", "Feature flags and A/B experiment assignment.", ["feature_flags", "experimentation", "typescript"], "ic:0", "ic:1"),
-  svc("email", "lifecycle-mail", "corvid/lifecycle-mail", "growth", "Transactional and lifecycle email delivery and templates.", ["email_delivery", "typescript"], "ic:2", "ic:0"),
-  svc("build", "build-pipeline", "corvid/build-pipeline", "platform", "CI runners, build caching and deploys for every backend service.", ["ci_cd", "go", "terraform"], "ic:0", "ic:1"),
-  svc("k8s", "k8s-platform", "corvid/k8s-platform", "platform", "The production and staging Kubernetes clusters, Helm charts and namespaces.", ["kubernetes", "terraform"], "ic:1", "planted:over_sre"),
-  svc("observability", "observability", "corvid/observability", "reliability", "Metrics, logs, traces and alerting.", ["observability", "go"], "ic:0", "planted:over_sre"),
-  svc("incident", "incident-bot", "corvid/incident-bot", "reliability", "On-call schedules, paging and the incident chat bot.", ["incident_response", "python"], "planted:over_sre", "ic:1"),
-  svc("ingest", "ingest-pipeline", "corvid/ingest-pipeline", "data_eng", "Kafka consumers and Airflow jobs that load product events into the warehouse.", ["kafka", "airflow", "python"], "planted:over_data", "ic:0"),
-  svc("warehouse", "warehouse", "corvid/warehouse", "data_eng", "Warehouse schemas, dbt models and access grants.", ["dbt", "sql", "data_modeling"], "ic:1", "planted:over_data"),
-  svc("search", "search-ranker", "corvid/search-ranker", "ml", "Ranks search results across shipments, invoices and documents.", ["search_ranking", "elasticsearch", "python"], "planted:booked_search", "ic:0"),
-  svc("recs", "recs-service", "corvid/recs-service", "ml", "Suggests next actions and related records.", ["recommendations", "python"], "ic:1", "ic:0"),
-  svc("dashboards", "bi-dashboards", "corvid/bi-dashboards", "analytics", "Company KPI dashboards and the metrics layer.", ["dashboards", "sql", "dbt"], "ic:0", "ic:1"),
-  svc("secrets", "vault-config", "corvid/vault-config", "appsec", "Secrets storage, rotation policies and service credentials.", ["secrets", "terraform"], "ic:0", "ic:1"),
-  svc("access", "access-review", "corvid/access-review", "appsec", "Access requests, approvals and quarterly reviews for production systems and data.", ["access_reviews", "permissions"], "ic:1", "ic:2"),
-  svc("helpdesk", "helpdesk-bridge", "corvid/helpdesk-bridge", "support_eng", "Syncs support tickets with accounts and escalates bugs to engineering.", ["helpdesk", "python", "escalations"], "ic:0", "ic:1"),
-  svc("devices", "mdm-config", "corvid/mdm-config", "it", "Laptop provisioning, MDM profiles and VPN.", ["device_management", "networking"], "ic:0", "ic:1"),
-  svc("onboarding_portal", "onboarding-portal", "corvid/onboarding-portal", "people", "New hire checklists, documents and benefits enrollment.", ["onboarding_programs"], "ic:0", "ic:1"),
-  svc("expenses", "expense-sync", "corvid/expense-sync", "finance", "Corporate cards, expense reports and reimbursements.", ["expense_policy", "sql"], "planted:vac_finance", "ic:0"),
+  svc("billing", "billing-service", "ferndale/billing-service", "payments", "Charges shippers, applies credits and handles Stripe webhooks.", ["payments", "stripe_api", "go", "postgres"], "planted:over_payments", "ic:0"),
+  svc("invoicing", "invoice-worker", "ferndale/invoice-worker", "payments", "Renders monthly invoices to PDF and emails them to finance contacts.", ["invoicing", "go", "email_delivery"], "ic:1", "planted:over_payments"),
+  svc("auth", "auth-gateway", "ferndale/auth-gateway", "identity", "Login, SSO (SAML and OIDC), session tokens and password resets for every app.", ["oauth_sso", "go", "redis"], "planted:vac_auth", "ic:0"),
+  svc("profiles", "profile-api", "ferndale/profile-api", "identity", "User and organization profiles, roles and permissions.", ["permissions", "go", "postgres"], "ic:1", "ic:2"),
+  svc("mobile_build", "mobile-ci", "ferndale/mobile-ci", "mobile", "Builds, signs and ships the iOS and Android apps.", ["ios_release", "android_release", "ci_cd"], "planted:over_mobile", "ic:0"),
+  svc("push", "push-notify", "ferndale/push-notify", "mobile", "Sends push notifications through APNs and FCM.", ["push", "kotlin", "swift"], "ic:1", "planted:over_mobile"),
+  svc("web_app", "web", "ferndale/web", "web", "The shipper-facing web application.", ["typescript", "react", "graphql"], "ic:0", "ic:1"),
+  svc("ui_kit", "ui-kit", "ferndale/ui-kit", "web", "Shared React components and design tokens.", ["design_systems", "react", "accessibility"], "ic:2", "ic:3"),
+  svc("flags", "flagd", "ferndale/flagd", "growth", "Feature flags and A/B experiment assignment.", ["feature_flags", "experimentation", "typescript"], "ic:0", "ic:1"),
+  svc("email", "lifecycle-mail", "ferndale/lifecycle-mail", "growth", "Transactional and lifecycle email delivery and templates.", ["email_delivery", "typescript"], "ic:2", "ic:0"),
+  svc("build", "build-pipeline", "ferndale/build-pipeline", "platform", "CI runners, build caching and deploys for every backend service.", ["ci_cd", "go", "terraform"], "ic:0", "ic:1"),
+  svc("k8s", "k8s-platform", "ferndale/k8s-platform", "platform", "The production and staging Kubernetes clusters, Helm charts and namespaces.", ["kubernetes", "terraform"], "ic:1", "planted:over_sre"),
+  svc("observability", "observability", "ferndale/observability", "reliability", "Metrics, logs, traces and alerting.", ["observability", "go"], "ic:0", "planted:over_sre"),
+  svc("incident", "incident-bot", "ferndale/incident-bot", "reliability", "On-call schedules, paging and the incident chat bot.", ["incident_response", "python"], "planted:over_sre", "ic:1"),
+  svc("ingest", "ingest-pipeline", "ferndale/ingest-pipeline", "data_eng", "Kafka consumers and Airflow jobs that load product events into the warehouse.", ["kafka", "airflow", "python"], "planted:over_data", "ic:0"),
+  svc("warehouse", "warehouse", "ferndale/warehouse", "data_eng", "Warehouse schemas, dbt models and access grants.", ["dbt", "sql", "data_modeling"], "ic:1", "planted:over_data"),
+  svc("search", "search-ranker", "ferndale/search-ranker", "ml", "Ranks search results across shipments, invoices and documents.", ["search_ranking", "elasticsearch", "python"], "planted:booked_search", "ic:0"),
+  svc("recs", "recs-service", "ferndale/recs-service", "ml", "Suggests next actions and related records.", ["recommendations", "python"], "ic:1", "ic:0"),
+  svc("dashboards", "bi-dashboards", "ferndale/bi-dashboards", "analytics", "Company KPI dashboards and the metrics layer.", ["dashboards", "sql", "dbt"], "ic:0", "ic:1"),
+  svc("secrets", "vault-config", "ferndale/vault-config", "appsec", "Secrets storage, rotation policies and service credentials.", ["secrets", "terraform"], "ic:0", "ic:1"),
+  svc("access", "access-review", "ferndale/access-review", "appsec", "Access requests, approvals and quarterly reviews for production systems and data.", ["access_reviews", "permissions"], "ic:1", "ic:2"),
+  svc("helpdesk", "helpdesk-bridge", "ferndale/helpdesk-bridge", "support_eng", "Syncs support tickets with accounts and escalates bugs to engineering.", ["helpdesk", "python", "escalations"], "ic:0", "ic:1"),
+  svc("devices", "mdm-config", "ferndale/mdm-config", "it", "Laptop provisioning, MDM profiles and VPN.", ["device_management", "networking"], "ic:0", "ic:1"),
+  svc("onboarding_portal", "onboarding-portal", "ferndale/onboarding-portal", "people", "New hire checklists, documents and benefits enrollment.", ["onboarding_programs"], "ic:0", "ic:1"),
+  svc("expenses", "expense-sync", "ferndale/expense-sync", "finance", "Corporate cards, expense reports and reimbursements.", ["expense_policy", "sql"], "planted:vac_finance", "ic:0"),
 ];
 
 // ---------------------------------------------------------------------------
@@ -417,7 +417,7 @@ export const PLANTED_DOCS: DocDef[] = [
       "1. Open the access portal and choose Request access, then Staging Postgres (read only).",
       "2. Pick a reason (debugging, analysis or onboarding) and a duration. Access lasts 14 days by default and expires on its own.",
       "3. Your manager approves the request. Most requests are approved within one business day.",
-      "4. Once approved, run `corvid db connect staging --readonly`. The command fetches short lived credentials from the vault; never copy a password into a file.",
+      "4. Once approved, run `ferndale db connect staging --readonly`. The command fetches short lived credentials from the vault; never copy a password into a file.",
       "Write access to staging is not granted to individuals. If you need to change data, ask the owning team to run a migration.",
       "If the command says your request is still pending after a day, ping your manager, not Security.",
     ].join("\n\n"),
@@ -433,7 +433,7 @@ export const PLANTED_DOCS: DocDef[] = [
       "Use this when the webhook signing secret may have leaked or when the 90 day rotation reminder fires.",
       "1. In the Stripe dashboard for the environment, roll the webhook endpoint secret and keep the old one valid for 24 hours.",
       "2. Store the new secret in vault-config under `billing/stripe/webhook_secret`. billing-service reads both the current and previous secret, so nothing breaks during the overlap.",
-      "3. Restart billing-service with `corvid deploy billing-service --restart`. No code change is needed.",
+      "3. Restart billing-service with `ferndale deploy billing-service --restart`. No code change is needed.",
       "4. Check the `billing_webhook_signature_failures` panel. It should stay at zero. A spike means a pod is still on the old config; restart it.",
       "5. After 24 hours, expire the old secret in Stripe.",
       "Staging uses its own Stripe account and its own secret. Never reuse the production secret in staging.",
@@ -508,7 +508,7 @@ export const PLANTED_DOCS: DocDef[] = [
 
 /** Generic onboarding docs not tied to a service. Bodies are templated. */
 export const GENERAL_DOCS: DocDef[] = [
-  { id: "doc_first_week", title: "Your first week at Corvid", kind: "onboarding", service: "svc_onboarding_portal", author: "primary", updated: -40, body: null },
+  { id: "doc_first_week", title: "Your first week at Ferndale", kind: "onboarding", service: "svc_onboarding_portal", author: "primary", updated: -40, body: null },
   { id: "doc_laptop_setup", title: "Setting up your laptop and VPN", kind: "onboarding", service: "svc_devices", author: "primary", updated: -35, body: null },
   { id: "doc_eng_onboarding", title: "Engineering onboarding: from laptop to first deploy", kind: "onboarding", service: "svc_build", author: "primary", updated: -18, body: null },
   { id: "doc_pto_policy", title: "Time off and holidays", kind: "reference", service: "svc_onboarding_portal", author: "secondary", updated: -90, body: null },
@@ -736,3 +736,11 @@ export const LAST_NAMES = [
   "Silva", "Singh", "Sokolov", "Suzuki", "Tanaka", "Torres", "Tran", "Usman", "Vargas", "Vasquez", "Wang", "Weber", "Wong", "Yamamoto", "Yilmaz",
   "Zhang", "Zhou",
 ];
+
+/**
+ * Names the owner chose for people the demo story leans on. Applied after the pick, so the name
+ * stream (and every other person) is unchanged: "Fatima Weber" (emp_113, billing-service backup).
+ */
+export const NAME_OVERRIDES: Record<string, { first: string; last: string }> = {
+  "Fatima Weber": { first: "Sophia", last: "Mitchell" },
+};

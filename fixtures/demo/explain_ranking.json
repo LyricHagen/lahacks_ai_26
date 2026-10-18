@@ -1,0 +1,27 @@
+{
+  "purpose": "explain_ranking",
+  "note": "Committed demo phrasing for the one-line reasons on the shortlist. Demo mode never calls a model: src/lib/model-purposes.ts builds each reason from the person's own strongest evidence sentence plus one reachability fact, using the words below, so every demo reason passes the same fact check as a live one.",
+  "verbLeads": [
+    "Owns",
+    "Is",
+    "Was",
+    "Answered",
+    "Wrote",
+    "Has",
+    "Uses",
+    "Worked",
+    "Covers",
+    "Manages",
+    "Leads"
+  ],
+  "ownerLeads": {
+    "Primary owner": "is the primary owner",
+    "Secondary owner": "is the secondary owner"
+  },
+  "tails": {
+    "room": "and has room this week ({detail})",
+    "free": "and is {detail}",
+    "none": ""
+  },
+  "roomBelowShare": 0.5
+}

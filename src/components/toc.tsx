@@ -40,7 +40,8 @@ export function Toc({ rootId, className, title = "On this page" }: { rootId: str
     const seen = new Set<string>();
     const found: Heading[] = [];
     root.querySelectorAll<HTMLHeadingElement>("h2, h3").forEach((h) => {
-      if (h.dataset.tocSkip !== undefined) return;
+      // Dialog titles are in the DOM while closed; they are not sections of the page.
+      if (h.dataset.tocSkip !== undefined || h.closest("dialog")) return;
       let id = h.id || slugify(h.textContent ?? "");
       while (seen.has(id)) id = `${id}-x`;
       seen.add(id);

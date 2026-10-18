@@ -2,13 +2,15 @@ import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { Suspense } from "react";
 import { DebugProvider } from "@/components/debug/debug-provider";
+import { DemoBanner, type DemoBannerInfo } from "@/components/demo/demo-banner";
 import { SiteFooter } from "@/components/site-footer";
 import { type HeaderSession, SiteHeader } from "@/components/site-header";
 import { themeInitScript } from "@/components/theme";
 import { ToastProvider } from "@/components/ui/toast";
+import { getPersonaSummary } from "@/lib/accounts";
 import { getSessionUser } from "@/lib/auth";
-import { MODE_REASON_LABEL, resolveMode } from "@/lib/mode";
-import { getRequestedMode } from "@/lib/mode-request";
+import { MODE_REASON_LABEL } from "@/lib/mode";
+import { currentMode } from "@/lib/mode-request";
 import { withPage } from "@/lib/request-context";
 import "./globals.css";
 
@@ -23,22 +25,27 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f5f4f1" },
-    { media: "(prefers-color-scheme: dark)", color: "#151514" },
+    { media: "(prefers-color-scheme: light)", color: "#f4f5f8" },
+    { media: "(prefers-color-scheme: dark)", color: "#121318" },
   ],
 };
 
-/** Who is signed in and which mode applies, for the header. Resolved server side on every render. */
-async function headerSession(): Promise<HeaderSession> {
+/** Who is signed in and which mode applies, for the header and the demo banner. Resolved server side on every render. */
+async function headerSession(): Promise<{ header: HeaderSession; banner: DemoBannerInfo }> {
   return withPage("layout.header", async () => {
     const user = await getSessionUser();
-    const mode = await resolveMode(user, await getRequestedMode());
-    return { signedIn: !!user, email: user?.email ?? null, isAdmin: user?.role === "admin", mode: mode.mode, modeReason: MODE_REASON_LABEL[mode.reason] };
+    const mode = await currentMode();
+    const persona = user?.isDemo ? await getPersonaSummary(user.employeeId) : null;
+    return {
+      header: { signedIn: !!user, email: user?.email ?? null, isAdmin: user?.role === "admin", mode: mode.mode, modeReason: MODE_REASON_LABEL[mode.reason] },
+      // Reset is for the people who use the demo data: the demo account, signed-out visitors, admins.
+      banner: { persona: persona ? `${persona.name}, ${persona.title} on ${persona.team}` : null, canReset: !user || user.isDemo || user.role === "admin" },
+    };
   });
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const session = await headerSession();
+  const { header, banner } = await headerSession();
   return (
     <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`} suppressHydrationWarning>
       <head>
@@ -49,7 +56,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           Skip to content
         </a>
         <ToastProvider>
-          <SiteHeader session={session} />
+          <DemoBanner info={banner} />
+          <SiteHeader session={header} />
           <main id="main" className="flex-1">
             {children}
           </main>

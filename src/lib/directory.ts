@@ -5,12 +5,13 @@ import "server-only";
 import { and, asc, count, desc, eq, gte, ilike, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import { q } from "@/db";
 import * as t from "@/db/schema";
+import { EMPLOYEE_ID_SQL, LOAD_WINDOW_DAYS, loadSqlFor } from "./availability";
 import { createLogger } from "./log";
 
 const log = createLogger("directory");
 
 export const PAGE_SIZE = 50;
-export const LOAD_WINDOW_DAYS = 7;
+export { LOAD_WINDOW_DAYS };
 
 export type DirectoryFilters = {
   q: string;
@@ -40,11 +41,11 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
   };
 }
 
-/** Asks routed to this person in the last LOAD_WINDOW_DAYS days. */
-const loadSql = sql<number>`(select count(*)::int from ${t.asks} a where a.routed_to_id = ${t.employees.id} and a.created_at >= now() - make_interval(days => ${LOAD_WINDOW_DAYS}))`;
-const ownsSql = sql<number>`(select count(*)::int from ${t.services} s where s.primary_owner_id = ${t.employees.id} or s.secondary_owner_id = ${t.employees.id})`;
+const ownsSql = sql<number>`(select count(*)::int from ${t.services} s where s.primary_owner_id = ${EMPLOYEE_ID_SQL} or s.secondary_owner_id = ${EMPLOYEE_ID_SQL})`;
 
-export async function listEmployees(f: DirectoryFilters) {
+/** `now` is app time (src/lib/clock.ts): load counts asks sent in the LOAD_WINDOW_DAYS before it. */
+export async function listEmployees(f: DirectoryFilters, now: Date) {
+  const loadSql = loadSqlFor(now);
   const conds: SQL[] = [];
   if (f.q) {
     const pat = `%${f.q.replace(/[%_\\]/g, (m) => `\\${m}`)}%`;
@@ -122,11 +123,10 @@ export async function directoryFacets() {
 // One person
 // ---------------------------------------------------------------------------
 
-export async function getPerson(id: string) {
+export async function getPerson(id: string, now: Date) {
   const [person] = await q("person.byId", (db) => db.select().from(t.employees).where(eq(t.employees.id, id)).limit(1));
   if (!person) return null;
 
-  const now = new Date();
   const weekAgo = new Date(now.getTime() - LOAD_WINDOW_DAYS * 86400_000);
   const weekAhead = new Date(now.getTime() + 7 * 86400_000);
 
@@ -193,7 +193,8 @@ export async function getPerson(id: string) {
         .select({ id: t.asks.id, title: t.asks.title, status: t.asks.status, createdAt: t.asks.createdAt, askerId: t.employees.id, askerName: t.employees.name })
         .from(t.asks)
         .leftJoin(t.employees, eq(t.employees.id, t.asks.askerEmployeeId))
-        .where(and(eq(t.asks.routedToId, id), gte(t.asks.createdAt, weekAgo)))
+        // Same rule as loadsThisWeek (src/lib/availability.ts): a sent transition to them is inside the window.
+        .where(sql`exists (select 1 from ${t.askEvents} e where e.ask_id = ${t.asks.id} and e.to_state = 'sent' and coalesce(e.data->>'recipientId', ${t.asks.routedToId}) = ${id} and e.at >= ${weekAgo.toISOString()}::timestamptz)`)
         .orderBy(desc(t.asks.createdAt)),
     ),
     q("person.calendar", (db) =>

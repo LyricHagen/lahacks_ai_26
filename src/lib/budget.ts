@@ -2,6 +2,7 @@ import "server-only";
 // Daily token budgets for live model calls, from env vars. A day is the UTC calendar day.
 // Tokens are input plus output tokens of live calls in usage_log (fallbacks record zero).
 
+import { wallNow } from "@/lib/clock";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { q } from "@/db";
 import * as t from "@/db/schema";
@@ -27,7 +28,7 @@ export function budgetLimits() {
   };
 }
 
-export function startOfUtcDay(now = new Date()): Date {
+export function startOfUtcDay(now = wallNow()): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
