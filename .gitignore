@@ -7,3 +7,10 @@ out
 *.tsbuildinfo
 next-env.d.ts
 .DS_Store
+
+# Fetch.ai uAgent (agents/fetch): local secrets and the Python venv
+agents/fetch/.env
+agents/fetch/.venv/
+agents/**/__pycache__/
+agents/fetch/*.db
+agents/fetch/agent*_data.json

@@ -16,12 +16,27 @@ import { getClock } from "@/lib/clock-request";
 import { DRAFT_VARIANTS, VARIANT_DEF } from "@/lib/draft";
 import { AppError } from "@/lib/errors";
 import { createLogger } from "@/lib/log";
+import { getSessionUser } from "@/lib/auth";
+import { getPhoneView, latestDelivery, maskHandle } from "@/lib/phone";
 import { withPage } from "@/lib/request-context";
 import { eq } from "drizzle-orm";
 import { q } from "@/db";
 import * as t from "@/db/schema";
 
 const log = createLogger("page.ask.draft");
+
+/** The phone option (FEATURE_PHOTON) for the ask's signed-in owner; null for anyone else or when off. */
+async function phoneFor(askId: string, ownerId: string | null): Promise<DraftClientData["phone"]> {
+  const user = await getSessionUser();
+  if (!user || !ownerId || user.id !== ownerId || user.isDemo) {
+    log.skip(`${askId} phone option`, !user ? "signed out (texting needs your own account)" : user.isDemo ? "shared demo account" : "viewer is not the ask's owner");
+    return null;
+  }
+  const v = await getPhoneView(user);
+  if (!v.enabled || !v.configured) return null;
+  const d = v.status === "linked" ? await latestDelivery(user.id, askId) : null;
+  return { linked: v.status === "linked", handle: v.status === "linked" ? maskHandle(v.handle ?? "") : null, lastDelivery: d ? { status: d.status, at: d.at } : null };
+}
 
 /**
  * /ask/[askId]/draft/{short,full,call}: one URL per variant, all under this layout, which holds
@@ -96,6 +111,7 @@ export default async function DraftLayout({ children, params }: { children: Reac
       texts: Object.fromEntries(DRAFT_VARIANTS.map((v) => [v, { subject: view.messages[v].subject, body: view.messages[v].body }])) as DraftClientData["texts"],
       originals: Object.fromEntries(DRAFT_VARIANTS.map((v) => [v, { subject: view.messages[v].originalSubject, body: view.messages[v].originalBody }])) as DraftClientData["originals"],
       format: s.sent?.format ?? view.messages[s.suggested.variant].format,
+      phone: await phoneFor(ask.id, ask.userId),
     };
     log.info(`${ask.id} draft page for ${s.recipient.id} in state ${ask.status}${readOnly ? " (read only)" : ""}: suggested ${s.suggested.variant}/${s.suggested.format}, via=${s.via}, load ${count}/${data.load?.max ?? "?"}`, { askId: ask.id });
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { flagOn } from "@/lib/flags";
 import { notFound, redirect } from "next/navigation";
 import { type ReactNode, Suspense } from "react";
 import { DocQuote } from "@/components/ask/doc-quote";
@@ -14,7 +15,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { ErrorState } from "@/components/ui/states";
 import { getAskExamples } from "@/lib/ask-examples";
 import { URGENCY_LABEL } from "@/lib/ask-state";
-import { ASK_BODY_MAX, ASK_BODY_MIN, ASK_EXTRA_MAX } from "@/lib/asks";
+import { ASK_BODY_MAX, ASK_BODY_MIN, ASK_EXTRA_MAX, SCREENSHOT_MAX_BYTES } from "@/lib/asks";
 import { getSessionUser } from "@/lib/auth";
 import { loadWeekStrips } from "@/lib/availability";
 import { clockLabel } from "@/lib/clock";
@@ -200,7 +201,7 @@ async function TryStep({ inDemo, v }: Ctx) {
         Type any problem, or start from an example. You are asking as {inDemo ? (v.persona?.name ?? "the demo new hire") : "a signed-out visitor"}. Afterwards, look at the{" "}
         <Link href="/dashboard">dashboard</Link>, the <Link href="/ramp">ramp plan</Link> and <Link href="/insights">insights</Link>.
       </p>
-      <Composer examples={examples} limits={{ bodyMin: ASK_BODY_MIN, bodyMax: ASK_BODY_MAX, extraMax: ASK_EXTRA_MAX }} />
+      <Composer examples={examples} limits={{ bodyMin: ASK_BODY_MIN, bodyMax: ASK_BODY_MAX, extraMax: ASK_EXTRA_MAX, screenshotBytes: SCREENSHOT_MAX_BYTES }} screenshot={flagOn("stepfun_vision", "the guided demo composer")} live={false} />
     </div>
   );
 }

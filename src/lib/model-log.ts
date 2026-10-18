@@ -25,6 +25,12 @@ export const MODEL_PRICES: Record<string, { input: number; output: number; gpuUs
   // The first fleet, on an L4 ($1.05/h), kept for the eval's L4 row.
   "who2ask-understand": { input: 0, output: 0, gpuUsdPerHour: 1.05 },
   "Qwen/Qwen2.5-1.5B-Instruct": { input: 0, output: 0, gpuUsdPerHour: 1.05 },
+  // StepFun step-5-preview, which reads screenshots (read_screenshot). USD list price as published by
+  // resellers in October 2026 (StepFun bills natively in yuan: 7 in, 20 out per million).
+  "step-5-preview": { input: 1, output: 2.7 },
+  // The CREAO glossary agent (resolve_jargon). CREAO bills runs in its own credits, not tokens, so
+  // the usage row records 0 USD and the run id plus credits (when reported) go in tier_note.
+  "creao-glossary-agent": { input: 0, output: 0 },
 };
 
 export type ModelUsage = { inputTokens: number; outputTokens: number };

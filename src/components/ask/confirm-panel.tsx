@@ -13,6 +13,7 @@ import { URGENCIES, URGENCY_LABEL } from "@/lib/ask-state";
 import { createLogger } from "@/lib/client-log";
 import { ARTIFACT_KINDS, ARTIFACT_LABEL, type ArtifactKind, HELP_KIND_LABEL, HELP_KINDS, type Understanding } from "@/lib/understanding";
 import { DocQuote } from "./doc-quote";
+import { ExtraReadings } from "./extra-readings";
 
 const log = createLogger("ask.confirm");
 
@@ -120,6 +121,7 @@ export function ConfirmPanel({ askId, u, docs, services, skills, canAct }: { ask
             {u.note ? ` ${u.note}` : ""}
           </p>
           {u.parse ? <p className="-mt-2 mb-3 font-mono text-[12px] text-muted">{u.parse.line}</p> : null}
+          <ExtraReadings u={u} />
 
           <Row label="Services" hint="Owners are searched first">
             {svc.map((s) => (

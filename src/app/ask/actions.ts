@@ -14,6 +14,7 @@ import {
   tryNextAction,
 } from "@/lib/ask-actions";
 import type { DraftFormat, DraftVariant } from "@/lib/draft";
+import { deliverDraftAction } from "@/lib/phone-actions";
 import type { ConfirmInput } from "@/lib/understanding";
 import type { NewAskInput } from "@/lib/asks";
 
@@ -52,4 +53,7 @@ export async function tryNext(input: { askId: string; employeeId: string }) {
 }
 export async function backToShortlist(input: { askId: string }) {
   return backToShortlistAction(input);
+}
+export async function deliverDraft(input: DraftFields) {
+  return deliverDraftAction(input);
 }

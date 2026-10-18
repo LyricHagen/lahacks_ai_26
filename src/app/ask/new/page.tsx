@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Container, PageHeader } from "@/components/page-header";
 import { getPersonaSummary } from "@/lib/accounts";
 import { getAskExamples } from "@/lib/ask-examples";
-import { ASK_BODY_MAX, ASK_BODY_MIN, ASK_EXTRA_MAX } from "@/lib/asks";
+import { ASK_BODY_MAX, ASK_BODY_MIN, ASK_EXTRA_MAX, SCREENSHOT_MAX_BYTES } from "@/lib/asks";
+import { flagOn } from "@/lib/flags";
 import { createLogger } from "@/lib/log";
 import { MODE_REASON_LABEL } from "@/lib/mode";
 import { currentMode } from "@/lib/mode-request";
@@ -18,7 +19,8 @@ export default async function Page() {
   return withPage("ask.new", async () => {
     const viewer = await getViewer();
     const [examples, persona, mode] = await Promise.all([getAskExamples(), getPersonaSummary(viewer.personaId), currentMode()]);
-    log.info(`composer for ${viewer.actorId} as ${persona?.id ?? "no persona"}`, { examples: examples.length, mode: mode.mode });
+    const screenshot = flagOn("stepfun_vision", "the composer's screenshot field");
+    log.info(`composer for ${viewer.actorId} as ${persona?.id ?? "no persona"}`, { examples: examples.length, mode: mode.mode, screenshotField: screenshot });
     return (
       <Container className="max-w-3xl">
         <PageHeader
@@ -44,7 +46,7 @@ export default async function Page() {
           . <span className="font-mono text-[12px]">{mode.mode === "live" ? "Live mode" : "Demo mode"}</span>
           <span className="text-subtle"> ({MODE_REASON_LABEL[mode.reason]})</span>
         </p>
-        <Composer examples={examples} limits={{ bodyMin: ASK_BODY_MIN, bodyMax: ASK_BODY_MAX, extraMax: ASK_EXTRA_MAX }} />
+        <Composer examples={examples} limits={{ bodyMin: ASK_BODY_MIN, bodyMax: ASK_BODY_MAX, extraMax: ASK_EXTRA_MAX, screenshotBytes: SCREENSHOT_MAX_BYTES }} screenshot={screenshot} live={mode.mode === "live"} />
       </Container>
     );
   });

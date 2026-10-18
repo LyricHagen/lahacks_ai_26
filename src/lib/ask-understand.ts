@@ -16,6 +16,7 @@ import type { StepContext, StepResult } from "./ask-pipeline";
 import { getSessionUser } from "./auth";
 import { findDocs } from "./doc-check";
 import { embedText } from "./embed";
+import { applyGlossary, extrasSearchText, readGlossary, readScreenshot } from "./ask-understand-extras";
 import { AppError } from "./errors";
 import { createLogger } from "./log";
 import { callModel } from "./model";
@@ -49,6 +50,8 @@ export async function understandAsk({ askId, progress }: StepContext): Promise<S
 
   const input = { askId, text, catalog };
   const [user, mode] = await Promise.all([getSessionUser(), currentMode()]);
+  // Company jargon first (FEATURE_CREAO_GLOSSARY), so its services join the reading before retrieval.
+  const glossary = await readGlossary({ askId, text, catalog, user, mode, progress });
   const t0 = performance.now();
   const r = await callModel({ purpose: "understand_ask", input, user, mode, askId });
   const callMs = Math.round(performance.now() - t0);
@@ -82,14 +85,19 @@ export async function understandAsk({ askId, progress }: StepContext): Promise<S
   }
 
   const u = buildUnderstanding({ label: askId, text, catalog, output, via, note, askUrgency: ask.urgency, parse });
+  applyGlossary(askId, u, glossary, catalog);
+  // An attached screenshot (FEATURE_STEPFUN_VISION), read into the same structure and unioned in.
+  await readScreenshot({ askId, text, catalog, user, mode, progress, into: u });
   log.info(`${askId} understood via=${via}: ${u.services.length} services (${u.services.map((s) => s.name).join(", ") || "none"}), ${u.skills.length} skills (${u.skills.map((s) => s.name).join(", ") || "none"}), help ${u.helpKind}, urgency ${u.urgency}, ${u.artifacts.length} artifacts, ${u.sensitive.length} sensitive`, { askId });
   log.info(`${askId} understanding JSON ${JSON.stringify(understandingForLog(u))}`, { askId });
 
-  const embedding = embedText(text);
+  const extra = extrasSearchText(u);
+  if (extra) log.branch(`${askId} embed the ask with glossary meanings and screenshot text`, `${extra.length} extra chars from ${[u.glossary?.hits.length ? "glossary" : "", u.screenshot?.via && u.screenshot.via !== "none" ? "screenshot" : ""].filter(Boolean).join(" and ")}`, { askId });
+  const embedding = embedText(extra ? `${text}\n${extra}` : text);
   await q("ask.understand.save", (db) => db.update(t.asks).set({ understanding: u, embedding, retrieval: null }).where(eq(t.asks.id, askId)));
 
   await progress("checking runbooks and onboarding docs before searching people");
-  const { hits, considered } = await findDocs({ label: askId, text, embedding, understanding: u });
+  const { hits, considered } = await findDocs({ label: askId, text: extra ? `${text}\n${extra}` : text, embedding, understanding: u });
   await getDb().transaction(async (tx) => {
     await qIn(tx, "ask.docs.clear", (h) => h.delete(t.askDocChecks).where(eq(t.askDocChecks.askId, askId)));
     if (hits.length)

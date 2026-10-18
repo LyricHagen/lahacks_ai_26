@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { URGENCY_LABEL } from "@/lib/ask-state";
+import { ExtraReadings } from "./extra-readings";
 import { ARTIFACT_LABEL, HELP_KIND_LABEL, type Understanding } from "@/lib/understanding";
 
 const VIA_LABEL = { model: "read by the model", fixture: "cached demo reading", keywords: "read by keyword matching" } as const;
@@ -39,6 +40,7 @@ export function UnderstandingSummary({ u }: { u: Understanding }) {
           </>
         ) : null}
       </dl>
+      <ExtraReadings u={u} />
       <p className="font-mono text-[12px] text-muted">
         {VIA_LABEL[u.via]}
         {u.editedByUser ? `, corrected by you (${u.edits.length} ${u.edits.length === 1 ? "change" : "changes"})` : ", confirmed as read"}

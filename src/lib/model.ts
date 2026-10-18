@@ -21,6 +21,11 @@ import "server-only";
 // ("tier 1/2 finetune FAILED ... falling to tier 2 frontier"), and the usage row says which tier
 // served and why (usage_log.tier, tier_note). The eval forces one tier with args.tier.
 //
+// Providers: anthropic (default), veri (the fine-tune), stepfun (step-5-preview, images for
+// read_screenshot) and creao (the glossary agent on agent.creao.ai, resolve_jargon). Gate 6 checks
+// the key of the provider the purpose's request names. The stepfun and creao modules, like veri,
+// are imported here and nowhere else.
+//
 // Scripts run by the owner (pnpm fixtures:record) wrap their work in runAsScript: inside it the
 // gate sees the script actor instead of the session user, and every live answer is handed to the
 // script's recorder. The web server never runs inside runAsScript (gate 2 refuses it there).
@@ -36,6 +41,8 @@ import { createLogger, currentReqId } from "./log";
 import { hasProviderKey, MODE_REASON_LABEL, type Mode, type ResolvedMode } from "./mode";
 import { type FixtureKey, fixtureKey, fromPlaceholders, isRecordedPurpose, lookupRecorded, normalizeForKey, toPlaceholders } from "./model-fixtures";
 import { estimateCostUsd, type ModelUsage, trackModelCall } from "./model-log";
+import { creaoRun } from "./model-creao";
+import { stepfunChat } from "./model-stepfun";
 import { type VeriConfig, veriChat } from "./model-veri";
 import { PURPOSES, type PurposeName } from "./model-purposes";
 import { span, spanAttr } from "./observe";
@@ -56,9 +63,23 @@ export type ModelRequest = {
   /** Put the system prompt in the provider's prompt cache (it must be the same for every call). */
   cacheSystem?: boolean;
   /** Who serves it. Default anthropic. */
-  provider?: "anthropic" | "veri";
+  provider?: ModelProvider;
+  /** Images sent with the prompt (provider stepfun only). Never logged; the caller logs size and hash. */
+  images?: Array<{ mime: string; base64: string }>;
+  /** The agent's named inputs (provider creao only). The prompt is not sent to CREAO. */
+  creaoInputs?: Record<string, string>;
   /** Deployment and model name, for provider veri. */
   veri?: VeriConfig;
+};
+
+export type ModelProvider = "anthropic" | "veri" | "stepfun" | "creao";
+
+/** The env vars a provider needs before gate 6 lets a call through. */
+export const PROVIDER_KEYS: Record<ModelProvider, string[]> = {
+  anthropic: ["ANTHROPIC_API_KEY"],
+  veri: ["VERI_API_KEY"],
+  stepfun: ["STEPFUN_API_KEY"],
+  creao: ["CREAO_API_KEY", "CREAO_APP_ID"],
 };
 
 /** Which link of a purpose's chain served a call. "frontier" is spec.request(). */
@@ -215,6 +236,19 @@ async function gate<P extends PurposeName>(args: CallArgs<P>): Promise<ModelResu
     let rawText = "";
     try {
       const output = await trackModelCall(args.purpose, tr.model, async () => {
+        if (prov === "stepfun") {
+          const r = await stepfunChat({ model: tr.model, system: tr.system, prompt: tr.prompt, images: tr.images ?? [], maxTokens: tr.maxTokens, timeoutMs: tr.timeoutMs ?? 45_000, effort: tr.effort });
+          usage = r.usage;
+          rawText = r.text;
+          return { result: spec.parse(r.text, args.input), usage };
+        }
+        if (prov === "creao") {
+          const r = await creaoRun({ inputs: tr.creaoInputs ?? {}, timeoutMs: tr.timeoutMs ?? 30_000 });
+          usage = r.usage;
+          rawText = r.text;
+          notes.push(`creao run ${r.runId}${r.credits !== null ? ` (${r.credits} credits)` : ""}`);
+          return { result: spec.parse(r.text, args.input), usage };
+        }
         if (prov === "veri") {
           const r = await veriChat({ config: tr.veri!, messages: [{ role: "system", content: tr.system }, { role: "user", content: tr.prompt }], maxTokens: tr.maxTokens, timeoutMs: tr.timeoutMs ?? 2500 });
           usage = r.usage;
@@ -317,8 +351,10 @@ async function gate<P extends PurposeName>(args: CallArgs<P>): Promise<ModelResu
     else if (!step(4, "user under daily budget", (budget.userUsed ?? 0) < budget.userLimit, `${budget.userUsed ?? 0} of ${budget.userLimit} tokens today`)) return "user_budget";
     if (!step(5, "global budget not exhausted", budget.globalUsed < budget.globalLimit, `${budget.globalUsed} of ${budget.globalLimit} tokens today`)) return "global_budget";
     const veriOnly = args.tier === "finetune" || args.tier === "base";
-    const keyOk = veriOnly ? !!process.env.VERI_API_KEY : hasProviderKey();
-    if (!step(6, "provider key exists", keyOk, veriOnly ? (keyOk ? "VERI_API_KEY set" : "VERI_API_KEY not set") : keyOk ? "ANTHROPIC_API_KEY set" : "ANTHROPIC_API_KEY not set")) return "no_api_key";
+    const prov: ModelProvider = veriOnly ? "veri" : (req.provider ?? "anthropic");
+    const missing = PROVIDER_KEYS[prov].filter((k) => !process.env[k]);
+    const keyOk = prov === "anthropic" ? hasProviderKey() : missing.length === 0;
+    if (!step(6, "provider key exists", keyOk, keyOk ? `${PROVIDER_KEYS[prov].join(", ")} set (provider ${prov})` : `${missing.join(", ") || "ANTHROPIC_API_KEY"} not set (provider ${prov})`)) return "no_api_key";
     return "live";
   }
 

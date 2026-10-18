@@ -15,6 +15,8 @@ import { createHash } from "node:crypto";
 import draftFile from "../../fixtures/model/draft_ask.json";
 import explainFile from "../../fixtures/model/explain_ranking.json";
 import rampFile from "../../fixtures/model/ramp_plan.json";
+import screenshotFile from "../../fixtures/model/read_screenshot.json";
+import jargonFile from "../../fixtures/model/resolve_jargon.json";
 import understandFile from "../../fixtures/model/understand_ask.json";
 
 /** Bump when key() changes for every purpose, so old recordings stop matching instead of lying. */
@@ -38,7 +40,7 @@ export type RecordedEntry = {
 export type RecordedFile = { version: number; purpose: string; note: string; entries: Record<string, RecordedEntry> };
 
 /** Purposes a user can trigger. gate_check and fixture_text are not recorded (see model-purposes). */
-export const RECORDED_PURPOSES = ["understand_ask", "explain_ranking", "draft_ask", "ramp_plan"] as const;
+export const RECORDED_PURPOSES = ["understand_ask", "explain_ranking", "draft_ask", "ramp_plan", "read_screenshot", "resolve_jargon"] as const;
 export type RecordedPurpose = (typeof RECORDED_PURPOSES)[number];
 
 const FILES: Record<RecordedPurpose, RecordedFile> = {
@@ -46,6 +48,8 @@ const FILES: Record<RecordedPurpose, RecordedFile> = {
   explain_ranking: explainFile as RecordedFile,
   draft_ask: draftFile as RecordedFile,
   ramp_plan: rampFile as RecordedFile,
+  read_screenshot: screenshotFile as RecordedFile,
+  resolve_jargon: jargonFile as RecordedFile,
 };
 
 export function isRecordedPurpose(p: string): p is RecordedPurpose {

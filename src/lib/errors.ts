@@ -47,6 +47,13 @@ export const ERROR_CODES = {
   DEMO_NOT_READY: "The guided demo needs the seeded company with its demo persona. Reseed from /admin/seed or run pnpm db:reset.",
   DEMO_RESET_FAILED: "Resetting the demo failed. Nothing you see may be complete; try Reset demo again.",
   DEMO_RESET_BUSY: "The demo is being reset right now. Wait a few seconds and reload.",
+  SCREENSHOT_INVALID: "The screenshot could not be attached. Use a PNG, JPEG or WebP under 1.5 MB.",
+  PHOTON_NOT_CONFIGURED: "Texting drafts to your phone is not set up on this server.",
+  PHOTON_NOT_LINKED: "Link your phone on the account page first: text the code from that phone.",
+  PHOTON_SEND_FAILED: "The draft could not be texted to your phone. Copy it from the page instead.",
+  PHOTON_INVALID_PHONE: "Enter your number with the country code, like +14155550123, or your iMessage email.",
+  AGENT_API_DISABLED: "The agent API is turned off on this server.",
+  AGENT_API_UNAUTHORIZED: "The agent API token is missing or wrong.",
 } as const;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

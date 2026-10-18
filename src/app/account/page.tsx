@@ -7,7 +7,9 @@ import { budgetLimits } from "@/lib/budget";
 import { MODE_REASON_LABEL, resolveMode } from "@/lib/mode";
 import { getRequestedMode } from "@/lib/mode-request";
 import { withPage } from "@/lib/request-context";
+import { getPhoneView } from "@/lib/phone";
 import { DeleteAccount, DemoToggle, LogoutButton } from "./account-controls";
+import { PhoneCard } from "./phone-card";
 
 export const metadata = { title: "Account" };
 
@@ -15,7 +17,7 @@ export default async function Page() {
   return withPage("account", async () => {
     const user = await requireUser("/account");
     const requested = await getRequestedMode();
-    const [mode, persona] = await Promise.all([resolveMode(user, requested), getPersonaSummary(user.employeeId)]);
+    const [mode, persona, phone] = await Promise.all([resolveMode(user, requested), getPersonaSummary(user.employeeId), getPhoneView(user)]);
     const limits = budgetLimits();
     return (
       <Container className="max-w-3xl">
@@ -83,12 +85,20 @@ export default async function Page() {
               </dl>
             </CardBody>
           </Card>
+          {phone.enabled && !user.isDemo ? (
+            <Card id="phone">
+              <CardHeader title="Text drafts to your phone" meta={phone.status === "linked" ? "linked" : phone.status === "pending" ? "waiting for your text" : "not linked"} />
+              <CardBody>
+                <PhoneCard view={phone} />
+              </CardBody>
+            </Card>
+          ) : null}
           {user.isDemo ? null : (
             <Card>
               <CardHeader title="Delete your account" />
               <CardBody>
                 <p className="mb-4 text-sm text-muted">
-                  Removes your account and everything tied to it: profile, asks, drafts, ramp plans, dismissals and usage records. See the <a href="/privacy#deleting-your-account">privacy policy</a>.
+                  Removes your account and everything tied to it: profile, asks, drafts, ramp plans, dismissals, usage records and a linked phone number. See the <a href="/privacy#deleting-your-account">privacy policy</a>.
                 </p>
                 <DeleteAccount />
               </CardBody>

@@ -12,6 +12,7 @@
 import { z } from "zod";
 import { type AskUrgency, URGENCIES } from "./ask-state";
 import { cosine, embedText } from "./embed";
+import type { GlossaryReading } from "./glossary";
 
 export const HELP_KINDS = ["where_is", "how_works", "is_expected", "unblock", "who_decides"] as const;
 export type HelpKind = (typeof HELP_KINDS)[number];
@@ -88,6 +89,24 @@ export type ParseInfo = {
 };
 export type NamedRef = { id: string; name: string; matched: string };
 
+/** What step-5-preview read from a screenshot attached to the ask (FEATURE_STEPFUN_VISION). */
+export type ScreenshotReading = {
+  sha256: string;
+  bytes: number;
+  mime: string;
+  /** stepfun (live), recorded (a recorded live answer replayed), sample (the committed demo result for the sample screenshot), none (nothing could read it). */
+  via: "stepfun" | "recorded" | "sample" | "none";
+  model: string;
+  ms: number;
+  /** "Cached demo result: ..." or why nothing was read. */
+  note: string | null;
+  /** The screenshot's own restatement, for the confirm screen. */
+  summary: string | null;
+  /** Error signatures read off the image (exact text), also added as error artifacts. */
+  errors: string[];
+  added: { services: string[]; skills: string[]; artifacts: number };
+};
+
 /** Stored in asks.understanding. */
 export type Understanding = {
   version: 2;
@@ -109,6 +128,10 @@ export type Understanding = {
   edits: string[];
   /** Absent on asks understood before prompt 11. */
   parse?: ParseInfo;
+  /** Company jargon read before retrieval (FEATURE_CREAO_GLOSSARY). Absent when the flag is off. */
+  glossary?: GlossaryReading;
+  /** A screenshot read by step-5-preview (FEATURE_STEPFUN_VISION). Absent when none was attached. */
+  screenshot?: ScreenshotReading;
 };
 
 /** Old prompt 4 rows had only services, skills, urgency, words. Fill the rest so every reader sees one shape. */
@@ -133,6 +156,8 @@ export function normalizeUnderstanding(raw: unknown): Understanding | null {
     editedByUser: !!r.editedByUser,
     edits: Array.isArray(r.edits) ? r.edits : [],
     parse: r.parse && typeof r.parse === "object" && typeof r.parse.line === "string" ? r.parse : undefined,
+    ...(r.glossary && Array.isArray(r.glossary.hits) ? { glossary: r.glossary } : {}),
+    ...(r.screenshot && typeof r.screenshot.sha256 === "string" ? { screenshot: r.screenshot } : {}),
   };
 }
 

@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "purpose": "read_screenshot",
+  "note": "Recorded live results, keyed by a hash of the normalized input. Written by pnpm fixtures:record; demo mode replays them and never calls a model.",
+  "entries": {}
+}

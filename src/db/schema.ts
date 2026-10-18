@@ -596,3 +596,85 @@ export const rampDismissals = pgTable(
   },
   (t) => [uniqueIndex("ramp_dismissals_owner_ref_idx").on(t.owner, t.refId)],
 );
+
+// ---------------------------------------------------------------------------
+// sponsor integrations (src/lib/flags.ts): StepFun screenshots, Photon phone delivery
+// ---------------------------------------------------------------------------
+
+/**
+ * A screenshot attached to an ask (FEATURE_STEPFUN_VISION). Held only until the understanding step
+ * reads it with step-5-preview, then deleted; the ask keeps only the hash and what was extracted.
+ */
+export const askAttachments = pgTable("ask_attachments", {
+  id: serial("id").primaryKey(),
+  askId: text("ask_id")
+    .notNull()
+    .references(() => asks.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  mime: text("mime").notNull(),
+  sha256: text("sha256").notNull(),
+  bytes: integer("bytes").notNull(),
+  dataBase64: text("data_base64").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * The account's own phone for draft delivery over Photon (FEATURE_PHOTON). Linked only after the
+ * person texts LINK <code> from that number: the app never starts a conversation, and it only ever
+ * replies in the space that number opened.
+ */
+export const userPhones = pgTable("user_phones", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** E.164 (+14155550123) or an iMessage email, exactly as Photon reports the sender. */
+  handle: text("handle").notNull().unique(),
+  /** pending (waiting for LINK <code>) or linked. */
+  status: text("status").notNull().default("pending"),
+  linkCode: text("link_code"),
+  codeExpiresAt: timestamp("code_expires_at", { withTimezone: true }),
+  /** From the inbound LINK message: where replies go (pho_spc_...), who sends them (pho_usr_...). */
+  platform: text("platform"),
+  spaceId: text("space_id"),
+  agentUserId: text("agent_user_id"),
+  lastInboundId: text("last_inbound_id"),
+  linkedAt: timestamp("linked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One draft texted to the account's own phone. A SENT reply marks the newest one sent. */
+export const phoneDeliveries = pgTable(
+  "phone_deliveries",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    askId: text("ask_id")
+      .notNull()
+      .references(() => asks.id, { onDelete: "cascade" }),
+    variant: text("variant").notNull(),
+    format: text("format").notNull(),
+    subject: text("subject").notNull().default(""),
+    body: text("body").notNull(),
+    photonMessageId: text("photon_message_id"),
+    /** accepted (Photon took it), failed, confirmed (the person replied SENT). */
+    status: text("status").notNull(),
+    errorCode: text("error_code"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  },
+  (t) => [index("phone_deliveries_user_idx").on(t.userId, t.createdAt)],
+);
+
+/** Every inbound Photon message handled once (dedupe across polls). The text itself is not stored. */
+export const photonInbound = pgTable("photon_inbound", {
+  messageId: text("message_id").primaryKey(),
+  handle: text("handle").notNull(),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+  /** linked, sent_confirmed, help, unlinked, ignored_unknown_sender, ... */
+  outcome: text("outcome").notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
+  handledAt: timestamp("handled_at", { withTimezone: true }).notNull().defaultNow(),
+});

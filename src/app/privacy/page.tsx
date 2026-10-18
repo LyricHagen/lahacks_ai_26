@@ -105,6 +105,29 @@ export default async function PrivacyPage() {
           that finds the sensitive parts. Providers process requests under their API terms; neither is given your identity.
         </p>
 
+        <h2 id="optional-integrations">Optional integrations</h2>
+        <p>These are off unless the operator turns them on. Each follows the demo and live rules above.</p>
+        <ul>
+          <li>
+            <strong>Company glossary (CREAO)</strong>: in live mode, the text of your ask goes to an agent on CREAO that matches company
+            nicknames to services. In demo mode the glossary is matched in our own code.
+          </li>
+          <li>
+            <strong>Screenshots (StepFun)</strong>: a screenshot you attach is stored only until it is read, then deleted; the ask keeps a hash
+            of it and what was read from it. In live mode the image goes to StepFun (step-5-preview). In demo mode it goes nowhere, and only
+            the sample screenshot can be read. Text in the image that looks like a secret or personal detail is never added to your draft.
+          </li>
+          <li>
+            <strong>Texting drafts to your phone (Photon)</strong>: only for signed-in accounts, only to the number you link, and only after you
+            text us a code from that number. We never text anyone else and never text first. We store the number, the conversation id and
+            the drafts you chose to text; not the text of your replies. Reply STOP to unlink; deleting your account removes all of it.
+          </li>
+          <li>
+            <strong>ASI:One agent (Fetch.ai)</strong>: when you use Altostratus from ASI:One, your messages pass through Fetch.ai&apos;s
+            Agentverse and ASI:One under their terms. The agent acts as a signed-out visitor in demo mode, so no model provider is called.
+          </li>
+        </ul>
+
         <h2>Sensitive content exclusion</h2>
         <p>
           When your ask is read, anything that should not reach a colleague is flagged: email addresses, phone numbers, credentials and secrets,

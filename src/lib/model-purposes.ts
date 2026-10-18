@@ -5,11 +5,14 @@ import "server-only";
 // a user can trigger also gets key() and a file in fixtures/model/ (src/lib/model-fixtures.ts), so
 // pnpm fixtures:record can store real live answers that demo mode replays.
 
+import { z } from "zod";
 import gateCheckFixture from "../../fixtures/demo/gate_check.json";
 import draftFixtureFile from "../../fixtures/demo/draft_ask.json";
 import explainFixtureFile from "../../fixtures/demo/explain_ranking.json";
 import understandFixtureFile from "../../fixtures/demo/understand_ask.json";
 import rampFixtureFile from "../../fixtures/demo/ramp_plan.json";
+import screenshotFixtureFile from "../../fixtures/demo/read_screenshot.json";
+import { entryById, GLOSSARY, GLOSSARY_VERSION, hitFor, type JargonResult, phraseAt, resolveJargonLocally } from "./glossary";
 import { CALL_MINUTES, type DraftInput, type DraftOutput, type DraftText, type DraftVariant, DRAFT_VARIANTS, firstPerson, WORD_LIMIT } from "./draft";
 import type { ModelRequest, PurposeSpec, TierRequest } from "./model";
 import { veriConfig, veriTimeoutMs, veriUnavailable } from "./model-veri";
@@ -532,12 +535,142 @@ const rampPlan: PurposeSpec<RampInput, RampOutput> = {
   fixture: (i) => demoRampPlan(i),
 };
 
+// ---------------------------------------------------------------------------
+// sponsor integrations: read_screenshot (StepFun) and resolve_jargon (CREAO)
+// ---------------------------------------------------------------------------
+
+export type ScreenshotImage = { mime: string; base64: string; sha256: string; bytes: number };
+export type ScreenshotInput = { askId: string; image: ScreenshotImage; catalog: Catalog };
+
+/** The committed reading of the sample screenshot (public/samples/), the only image demo mode can read. */
+export function screenshotFixture(sha256: string): { output: ModelUnderstand; label: string } | null {
+  const hit = (screenshotFixtureFile.samples as Array<{ sha256: string; label: string; output: unknown }>).find((x) => x.sha256 === sha256);
+  if (!hit) return null;
+  const parsed = ModelUnderstandSchema.safeParse(hit.output);
+  return parsed.success ? { output: parsed.data, label: hit.label } : null;
+}
+
+/**
+ * Reads a screenshot attached to an ask (an error page, a dashboard, a stack trace) with
+ * step-5-preview into exactly the structure the text path returns (ModelUnderstand): services and
+ * skills from the catalog, the error signatures as error artifacts copied character for character,
+ * and anything sensitive visible in the image. The understanding step unions it into the text
+ * reading (src/lib/ask-understand.ts). Provider stepfun; the image goes nowhere else.
+ */
+const readScreenshot: PurposeSpec<ScreenshotInput, ModelUnderstand> = {
+  describe: (i) => `${i.askId} image ${i.image.sha256.slice(0, 12)} (${i.image.mime}, ${i.image.bytes} bytes)`,
+  // The image (by hash) and which services and skills exist; not the ask id.
+  key: (i) => ({ image: i.image.sha256, services: i.catalog.services.map((s) => s.id).sort(), skills: i.catalog.skills.map((s) => s.id).sort() }),
+  request: (i) => ({
+    provider: "stepfun",
+    model: process.env.STEPFUN_MODEL || "step-5-preview",
+    system: [
+      "You read a screenshot a new hire at Ferndale Systems (freight software) attached to a question for a colleague: an error page, a terminal, a stack trace, a CI log or a dashboard.",
+      "Return one JSON object with exactly these keys: restatement, serviceIds, skillIds, artifacts, helpKind, urgency, sensitive.",
+      "Rules:",
+      "- restatement: one plain sentence in the second person (\"You ...\") saying what the screenshot shows is wrong. No names of people. No em dashes or en dashes.",
+      "- serviceIds and skillIds: only ids from the catalog below, chosen from what is visible (service or repo names, hostnames, file paths, package names, dashboard titles, tools). Never invent ids. Empty when nothing visible points at one.",
+      "- artifacts: the error signatures you can read, each {\"kind\": \"error\", \"text\": ...} copied character for character (exception class and message, HTTP status line, exit code line). Also repo, dashboard, ticket or link artifacts you can read. At most 6, most specific first, each under 200 characters.",
+      "- helpKind: unblock when something is failing; is_expected when it asks whether a number or state is normal; where_is, how_works or who_decides otherwise.",
+      "- urgency: null unless the screenshot itself says production or customers are affected (then blocked_now).",
+      "- sensitive: exact text visible in the image that must not be forwarded: tokens, keys, passwords, personal emails or phone numbers, customer personal data. Never repeat such text in artifacts.",
+      "",
+      `Catalog of services (id: name, repo, what it does):\n${i.catalog.services.map((s) => `${s.id}: ${s.name}, ${s.repo}, ${s.description ?? ""}`).join("\n")}`,
+      "",
+      `Catalog of skills (id: name, other words):\n${i.catalog.skills.map((s) => `${s.id}: ${s.name}${s.aliases.length ? ` (${s.aliases.join(", ")})` : ""}`).join("\n")}`,
+    ].join("\n"),
+    prompt: "Read the attached screenshot and return the JSON object.",
+    images: [{ mime: i.image.mime, base64: i.image.base64 }],
+    maxTokens: 4000,
+    effort: "low",
+    timeoutMs: Number(process.env.STEPFUN_TIMEOUT_MS) > 0 ? Number(process.env.STEPFUN_TIMEOUT_MS) : 45_000,
+  }),
+  parse: (text) => {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(extractJsonObject(text));
+    } catch (err) {
+      throw new Error(`read_screenshot output is not JSON: ${(err as Error).message}`);
+    }
+    const r = ModelUnderstandSchema.safeParse(raw);
+    if (!r.success) throw new Error(`read_screenshot output failed validation: ${r.error.issues.map((x) => `${x.path.join(".")} ${x.message}`).join("; ")}`);
+    return r.data;
+  },
+  fixture: (i) => screenshotFixture(i.image.sha256)?.output ?? null,
+};
+
+export type JargonInput = { askId: string; text: string };
+
+/** What the glossary agent sends back. Entry ids only: services and skills come from GLOSSARY, never from the agent. */
+const JargonAnswerSchema = z.object({
+  hits: z.array(z.object({ phrase: z.string().trim().min(1).max(120), glossaryId: z.string().max(60), confidence: z.enum(["high", "medium"]).default("high") })).max(20),
+  unknown: z.array(z.string().trim().min(1).max(60)).max(10).default([]),
+});
+
+/**
+ * Parse the agent's answer and ground it: every hit must name a glossary entry and a phrase that is
+ * really in the ask. Anything else is dropped and listed in dropped (the caller logs it).
+ */
+export function parseJargonAnswer(text: string, askText: string): JargonResult & { dropped: string[] } {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(extractJsonObject(text));
+  } catch (err) {
+    throw new Error(`resolve_jargon output is not JSON: ${(err as Error).message}`);
+  }
+  const r = JargonAnswerSchema.safeParse(raw);
+  if (!r.success) throw new Error(`resolve_jargon output failed validation: ${r.error.issues.map((x) => `${x.path.join(".")} ${x.message}`).join("; ")}`);
+  const dropped: string[] = [];
+  const hits = r.data.hits.flatMap((h) => {
+    const e = entryById(h.glossaryId);
+    if (!e) return (dropped.push(`unknown entry ${h.glossaryId}`), []);
+    const at = phraseAt(askText, h.phrase);
+    if (at < 0) return (dropped.push(`phrase "${h.phrase}" is not in the ask`), []);
+    return [hitFor(e, askText.slice(at, at + h.phrase.length), h.confidence)];
+  });
+  const unique = hits.filter((h, i) => hits.findIndex((x) => x.glossaryId === h.glossaryId) === i);
+  const unknown = r.data.unknown.filter((u) => phraseAt(askText, u) >= 0 && !unique.some((h) => h.phrase.toLowerCase() === u.toLowerCase()));
+  return { hits: unique, unknown, dropped };
+}
+
+/**
+ * The glossary agent: reads the ask against Ferndale's jargon table before retrieval. Live, it is a
+ * saved agent on agent.creao.ai (agents/creao/glossary-agent.md) run through its API trigger: it
+ * catches misspellings, inflections and paraphrases of the terms and names jargon it cannot
+ * resolve. Demo and fallback: exact whole-word matches (resolveJargonLocally).
+ */
+const resolveJargon: PurposeSpec<JargonInput, JargonResult> = {
+  describe: (i) => i.askId,
+  key: (i) => ({ text: i.text, glossary: GLOSSARY_VERSION }),
+  request: (i) => ({
+    provider: "creao",
+    model: "creao-glossary-agent",
+    // The agent's instructions live on CREAO (agents/creao/glossary-agent.md); only creaoInputs is sent.
+    system: "see agents/creao/glossary-agent.md",
+    prompt: i.text,
+    maxTokens: 0,
+    timeoutMs: Number(process.env.CREAO_TIMEOUT_MS) > 0 ? Number(process.env.CREAO_TIMEOUT_MS) : 30_000,
+    creaoInputs: {
+      ask: i.text,
+      glossary: JSON.stringify(GLOSSARY.map((g) => ({ id: g.id, term: g.term, aliases: g.aliases, means: g.means }))),
+      glossary_version: GLOSSARY_VERSION,
+    },
+  }),
+  parse: (text, i) => {
+    const { hits, unknown } = parseJargonAnswer(text, i.text);
+    return { hits, unknown };
+  },
+  fixture: (i) => resolveJargonLocally(i.text),
+};
+
 export const PURPOSES = {
   gate_check: gateCheck,
   understand_ask: understandAsk,
   explain_ranking: explainRanking,
   draft_ask: draftAsk,
   ramp_plan: rampPlan,
+  read_screenshot: readScreenshot,
+  resolve_jargon: resolveJargon,
   fixture_text: fixtureText,
   train_phrasing: trainPhrasing,
 };

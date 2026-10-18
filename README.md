@@ -65,6 +65,51 @@ The first account you sign up becomes the admin (approved, so it gets live mode 
 
 With only `DATABASE_URL` and `AUTH_SECRET`, the app runs entirely in demo mode, including the guided demo.
 
+## Sponsor integrations
+
+Four optional integrations, each behind its own flag (`src/lib/flags.ts`). With every flag off the app behaves exactly as before. Every check is logged (`grep "flag "`), and so is every call (`grep "\[model.stepfun\]"`, `"creao run"`, `"\[photon.api\]"`, `"\[phone\]"`, `"\[agent.api\]"`). `/privacy#optional-integrations` says what data each one touches.
+
+### Which model does what
+
+| Step | Model or service | Where |
+|---|---|---|
+| Read the ask into services, skills, urgency, sensitive spans | Fine-tuned Qwen2.5 1.5B + LoRA on Veri, falling back to Claude Haiku 5.5 | `understand_ask` |
+| Resolve company jargon before retrieval | CREAO glossary agent (`FEATURE_CREAO_GLOSSARY`) | `resolve_jargon` |
+| Read an attached screenshot into the same structure as the text | **StepFun step-5-preview** (`FEATURE_STEPFUN_VISION`) | `read_screenshot` |
+| Retrieval, ranking, availability | No model: pgvector with a local hashed embedding, `rank.ts`, `availability.ts` | |
+| Reasons on the shortlist, the draft, the ramp plan | Claude Haiku 5.5 | `explain_ranking`, `draft_ask`, `ramp_plan` |
+
+All of them go through `callModel` (`src/lib/model.ts`): same 6 gate checks, usage row, demo fixture and recorded fixtures. Demo mode never calls a provider.
+
+### Fetch.ai (ASI:One): `FEATURE_FETCH_AGENT`
+
+- **Agent address:** `agent1q2lddust7jzpstppag2mhn9h5c5m04vngtyhcegg9gq2q239n2d0qe84tj8`
+- uAgent in `agents/fetch/` (README there), Agent Chat Protocol 0.3.0, mailbox, manifest published. It calls the app, it does not reimplement it: `POST /api/agent/asks`, `POST /api/asks/[askId]/run` (existing), `GET /api/agent/asks/[askId]`, `.../confirm`, `.../choose`, `.../sent`, `.../retry`. Each route calls the same function the web UI does.
+- Whole workflow in the chat: describe the problem, then a review or detail card (understanding, company terms, a doc that may answer it), then a carousel card with the shortlist and a reason per person, then pick a person, then a review card with the draft, then "I sent it".
+- Reliability: 3 attempts with backoff on network errors, 429 and 5xx (honours Retry-After); waits out a held run lease; resubmits a failed step once; re-creates an ask a demo reset deleted; re-reads state on a conflict; a plain message with the error code otherwise. `agents/fetch/test_flow.py` plays the flow and the recovery paths.
+- Auth: bearer `AGENT_API_TOKEN`; each ASI:One sender acts as its own signed-out visitor (demo mode), isolated from every other sender.
+- Requirements: registered on Agentverse (mailbox), Chat Protocol, usable from ASI:One, full workflow in the chat, Interactive Cards, error recovery.
+
+### CREAO: `FEATURE_CREAO_GLOSSARY`
+
+- **Agent id:** _fill in from agent.creao.ai_ &nbsp; **Run share link:** _fill in_
+- The glossary agent (`agents/creao/glossary-agent.md`) reads the ask against Ferndale's jargon table (`src/lib/glossary.ts`: "the till" means billing-service, "Paperboy" means invoice-worker, "WH secret", "DLQ", ...). It runs before retrieval. Its hits add services and skills to the understanding and their meanings to the search text. The agent may only answer with glossary ids, and each phrase must appear in the ask.
+- Why it is core: "The till double charged a shipper after the WH secret rotated" names no service, and the text reader finds none. The glossary supplies billing-service, vault-config and the Stripe skills, and that is what makes the right owners show up. Without the agent, jargon-only asks route by wording alone.
+- Live: CREAO API Trigger (`src/lib/model-creao.ts`), run then poll, 30s timeout. Demo: exact whole-word matches in our code.
+
+### Photon: `FEATURE_PHOTON`
+
+- `/account#phone`: enter your own number, get a code, text `LINK <code>` from that number to the agent's number. This is inbound only: the app never texts first.
+- On a ready draft, "Text it to my phone" sends the draft to that conversation. Send it from your real messaging app, then reply `SENT`. That runs the same `markSent` as "I sent this" (the recipient's load moves). `STOP` unlinks.
+- Never messages anyone else: the single send function (`replyTo` in `src/lib/phone.ts`) only accepts a linked row, and unknown senders, wrong codes and group chats are logged and never answered.
+- Inbound is polled through `POST /api/photon/sync`: by the page while it waits, or by a scheduler with `PHOTON_SYNC_SECRET`.
+
+### StepFun: `FEATURE_STEPFUN_VISION`
+
+- The composer has an optional screenshot (PNG, JPEG or WebP under 1.5 MB, scaled in the browser), plus a "Use the sample screenshot" button.
+- In the understanding step, `read_screenshot` calls **step-5-preview** at runtime. It returns exactly the text path's structure (services, skills, error signatures as artifacts, sensitive spans), which is unioned into the understanding. The confirm screen shows what it read. Text that looks like a secret never becomes an artifact. The image is deleted once read.
+- Demo mode reads only the committed sample (`public/samples/billing-webhook-error.png`, `fixtures/demo/read_screenshot.json`).
+
 ## Deploy (Vercel)
 
 1. Create a Neon Postgres database (Vercel Marketplace) and copy its pooled URL.

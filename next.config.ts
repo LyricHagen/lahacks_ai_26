@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   // The floating dev badge overlaps the debug drawer; build errors still show in the overlay.
   devIndicators: false,
   serverExternalPackages: ["postgres"],
+  // The composer sends an optional screenshot (FEATURE_STEPFUN_VISION, at most 1.5 MB once decoded,
+  // about 2 MB as base64) through the ask.create server action; the default limit is 1 MB.
+  experimental: { serverActions: { bodySizeLimit: "3mb" } },
   // Next prints every server function call with its raw arguments in dev, which would put
   // passwords and confidential ask notes in the terminal. withAction logs inputs with redaction.
   logging: { serverFunctions: false },

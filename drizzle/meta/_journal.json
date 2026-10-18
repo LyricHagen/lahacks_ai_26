@@ -85,6 +85,13 @@
       "when": 1792301115810,
       "tag": "0011_model_tiers",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792339459038,
+      "tag": "0012_sponsor_integrations",
+      "breakpoints": true
     }
   ]
 }

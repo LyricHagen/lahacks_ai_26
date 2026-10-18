@@ -100,6 +100,14 @@ grep "fixture key"             (trace) the normalized input behind a hash: diff 
 grep "demo reset"              Reset demo: who pressed it, what it deleted (asks by state, events, drafts, ramp plans, rate limit windows), every load counter that moved, the rebuilt asks, the pinned clock, timing
 grep "demo sign in"            someone entered the guided demo (and whose session it replaced)
 grep "guided step"             each /demo/<step> view: step, viewer, guided ask and its state
+grep "flag "                   every sponsor flag check (on/off, which env vars are missing)
+grep "glossary"                the CREAO glossary step: via=creao|recorded|local, each hit and what it added
+grep "creao run"               one CREAO agent run: start, status changes, polls, credits
+grep "screenshot"              an attached screenshot: accepted (size, hash), read via=stepfun|sample|none, deleted
+grep "\[model.stepfun\]"       each step-5-preview request: attempt, status, ms, tokens
+grep "\[agent.api\]"           the ASI:One agent's calls: auth decision per sender, views
+grep "\[phone\]"               phone link, deliveries, every inbound text and its outcome (never the text)
+grep "\[photon.api\]"          each Photon API request: status, ms, Photon request id
 ```
 
 ## How the request id works

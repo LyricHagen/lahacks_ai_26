@@ -23,7 +23,14 @@ const Text = (max: number) => z.string().max(max);
 const ONBOARDING_STEPS = ["role", "context", "channels"] as const satisfies readonly OnboardingStep[];
 
 export const ActionInputs = {
-  "ask.create": z.object({ body: Text(8000), tried: Text(4000).optional(), urgency: z.string().max(40).optional(), confidential: Text(4000).optional() }),
+  "ask.create": z.object({
+    body: Text(8000),
+    tried: Text(4000).optional(),
+    urgency: z.string().max(40).optional(),
+    confidential: Text(4000).optional(),
+    // About 1.5 MB decoded; asks.ts checks the type, the magic bytes and the exact size.
+    screenshot: z.object({ mime: z.string().max(40), dataBase64: z.string().max(2_100_000).regex(/^[A-Za-z0-9+/=]*$/) }).optional(),
+  }),
   "ask.abandon": z.object({ askId: AskId }),
   "ask.retry": z.object({ askId: AskId }),
   "ask.reshortlist": z.object({ askId: AskId }),
@@ -47,6 +54,9 @@ export const ActionInputs = {
   "ramp.dismiss": z.object({ weekStart: IsoDay, refId: RefId }),
   "ramp.undo": z.object({ refId: RefId }),
   "demo.enter": z.object({ next: NextPath.nullish() }).optional(),
+  "phone.link": z.object({ handle: Text(200) }),
+  "phone.unlink": z.undefined(),
+  "phone.deliver": z.object({ askId: AskId, variant: z.enum(DRAFT_VARIANTS), format: z.enum(DRAFT_FORMATS), subject: Text(1000), body: Text(20000) }),
   // Self-validating (their own Zod schema in the handler) or taking no input:
   "ask.confirm": z.unknown(),
   "auth.delete_account": z.unknown(),
@@ -57,6 +67,14 @@ export const ActionInputs = {
 } satisfies Record<string, z.ZodType>;
 
 export type ActionName = keyof typeof ActionInputs;
+
+/** JSON bodies of the agent API (/api/agent/*, FEATURE_FETCH_AGENT). */
+export const AgentBodies = {
+  create: z.object({ body: Text(4000), tried: Text(2000).optional(), urgency: z.enum(["blocked_now", "blocked_today", "curious"]).optional() }),
+  confirm: z.object({ answeredByDocId: z.string().regex(/^doc_[a-z0-9_]{1,80}$/).nullable().optional() }),
+  choose: z.object({ employeeId: EmployeeId }),
+  sent: z.object({ variant: z.enum(DRAFT_VARIANTS) }),
+};
 
 export const ParamSchemas = {
   askId: z.object({ askId: AskId }),

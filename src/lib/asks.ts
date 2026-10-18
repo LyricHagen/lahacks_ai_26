@@ -10,6 +10,8 @@ import * as t from "@/db/schema";
 import { type AskState, type AskUrgency, ASK_STATES, isOpen, URGENCIES } from "./ask-state";
 import { recordCreated, transitionAsk } from "./ask-transition";
 import { AppError } from "./errors";
+import { createHash } from "node:crypto";
+import { flagOn } from "./flags";
 import { createLogger, markSensitive } from "./log";
 import { ensureVisitorId, getViewer, type Viewer } from "./viewer";
 
@@ -19,7 +21,44 @@ export const ASK_BODY_MIN = 8;
 export const ASK_BODY_MAX = 4000;
 export const ASK_EXTRA_MAX = 2000;
 
-export type NewAskInput = { body: string; tried?: string; urgency?: string; confidential?: string };
+export type NewAskInput = { body: string; tried?: string; urgency?: string; confidential?: string; screenshot?: ScreenshotUpload };
+
+/** A screenshot from the composer (FEATURE_STEPFUN_VISION), already downscaled in the browser. */
+export type ScreenshotUpload = { mime: string; dataBase64: string };
+export const SCREENSHOT_MIMES = ["image/png", "image/jpeg", "image/webp"] as const;
+export const SCREENSHOT_MAX_BYTES = 1_500_000;
+
+type Attachment = { kind: "screenshot"; mime: string; sha256: string; bytes: number; dataBase64: string };
+
+/** Check a composer screenshot: flag on, an allowed type, the bytes really are that image, under the size cap. */
+function screenshotAttachment(s: ScreenshotUpload | undefined): Attachment | null {
+  if (!s) return null;
+  if (!flagOn("stepfun_vision", "a screenshot attached in the composer")) {
+    log.warn("screenshot refused: FEATURE_STEPFUN_VISION is off (the composer should not have offered it)");
+    throw new AppError("SCREENSHOT_INVALID", "Screenshot reading is turned off.", { status: 400 });
+  }
+  if (!(SCREENSHOT_MIMES as readonly string[]).includes(s.mime)) {
+    log.info(`screenshot refused: type ${s.mime} is not one of ${SCREENSHOT_MIMES.join(", ")}`);
+    throw new AppError("SCREENSHOT_INVALID", "Attach a PNG, JPEG or WebP image.", { status: 400 });
+  }
+  const buf = Buffer.from(s.dataBase64, "base64");
+  const magic = buf.subarray(0, 12);
+  const looksRight =
+    (s.mime === "image/png" && magic[0] === 0x89 && magic[1] === 0x50) ||
+    (s.mime === "image/jpeg" && magic[0] === 0xff && magic[1] === 0xd8) ||
+    (s.mime === "image/webp" && magic.subarray(8, 12).toString("ascii") === "WEBP");
+  if (!looksRight || buf.length < 100) {
+    log.info(`screenshot refused: ${buf.length} bytes do not look like ${s.mime}`);
+    throw new AppError("SCREENSHOT_INVALID", "That file is not a readable image.", { status: 400 });
+  }
+  if (buf.length > SCREENSHOT_MAX_BYTES) {
+    log.info(`screenshot refused: ${buf.length} bytes, over ${SCREENSHOT_MAX_BYTES}`);
+    throw new AppError("SCREENSHOT_INVALID", `Keep the screenshot under ${Math.round(SCREENSHOT_MAX_BYTES / 1_000_000 * 10) / 10} MB.`, { status: 400 });
+  }
+  const sha256 = createHash("sha256").update(buf).digest("hex");
+  log.info(`screenshot accepted: ${s.mime}, ${buf.length} bytes, sha256 ${sha256.slice(0, 12)} (held until the understanding step reads it)`);
+  return { kind: "screenshot", mime: s.mime, sha256, bytes: buf.length, dataBase64: buf.toString("base64") };
+}
 
 function titleFrom(body: string): string {
   const first = body.trim().split(/\n/)[0].replace(/\s+/g, " ");
@@ -48,6 +87,7 @@ export async function createAndSubmitAsk(input: NewAskInput): Promise<{ askId: s
     throw new AppError("ASK_INVALID_INPUT", `Keep the description under ${ASK_BODY_MAX} characters and the extra fields under ${ASK_EXTRA_MAX}.`, { status: 400 });
   }
 
+  const attachment = screenshotAttachment(input.screenshot);
   const viewer = await getViewer();
   const visitorId = viewer.user ? null : await ensureVisitorId();
   if (!viewer.personaId) {
@@ -57,7 +97,7 @@ export async function createAndSubmitAsk(input: NewAskInput): Promise<{ askId: s
   const actorId = viewer.user?.id ?? visitorId ?? "visitor";
   // Asks made in the shared demo account are demo data, like a signed-out visitor's: Reset demo removes them.
   const source = !viewer.user || viewer.user.isDemo ? "demo" : "user";
-  const askId = await insertAndSubmitAsk({ userId: viewer.user?.id ?? null, visitorId, personaId: viewer.personaId, actorId, source, body, tried, urgency, confidential, reason: "submitted from /ask/new" });
+  const askId = await insertAndSubmitAsk({ userId: viewer.user?.id ?? null, visitorId, personaId: viewer.personaId, actorId, source, body, tried, urgency, confidential, attachment, reason: "submitted from /ask/new" });
   log.info(`${askId} created by ${actorId} as ${viewer.personaId}`, {
     askId,
     urgency,
@@ -66,6 +106,7 @@ export async function createAndSubmitAsk(input: NewAskInput): Promise<{ askId: s
     hasTried: !!tried,
     // Only whether it exists: the note itself is never written to a log.
     hasConfidentialNote: !!confidential,
+    screenshot: attachment ? `${attachment.mime} ${attachment.bytes} bytes ${attachment.sha256.slice(0, 12)}` : null,
   });
   return { askId, state: "understanding" };
 }
@@ -85,6 +126,7 @@ export async function insertAndSubmitAsk(a: {
   tried: string | null;
   urgency: AskUrgency;
   confidential: string | null;
+  attachment?: Attachment | null;
   reason: string;
 }): Promise<string> {
   return getDb().transaction(async (tx) => {
@@ -106,6 +148,7 @@ export async function insertAndSubmitAsk(a: {
         .returning({ id: t.asks.id }),
     );
     await recordCreated(tx, row.id, "draft", "user", a.actorId, a.reason.replace(/^submitted from/, "composed on"));
+    if (a.attachment) await qIn(tx, "ask.attachment.insert", (h) => h.insert(t.askAttachments).values({ askId: row.id, ...a.attachment! }));
     await transitionAsk(
       { askId: row.id, to: "understanding", expectFrom: "draft", actor: "user", actorId: a.actorId, reason: a.reason, set: { progress: "queued", progressAt: wallNow() } },
       tx,
@@ -177,6 +220,7 @@ export async function getAskDetail(askId: string) {
         hasConfidential: sql<boolean>`${t.asks.confidential} is not null`,
         status: t.asks.status,
         source: t.asks.source,
+        userId: t.asks.userId,
         understanding: t.asks.understanding,
         retrieval: t.asks.retrieval,
         ranking: t.asks.ranking,

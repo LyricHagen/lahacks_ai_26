@@ -14,6 +14,7 @@ import { getDb, q, qIn } from "@/db";
 import * as t from "@/db/schema";
 import { transitionAsk } from "./ask-transition";
 import { embedText } from "./embed";
+import { extrasSearchText } from "./ask-understand-extras";
 import { AppError } from "./errors";
 import { createLogger, markSensitive } from "./log";
 import { askText, loadCatalog, protectUnderstanding } from "./understand-build";
@@ -95,7 +96,7 @@ export async function confirmAsk(raw: unknown, viewer: Viewer): Promise<{ askId:
   };
   const searchChanged = edits.some((e) => /restatement|service|skill/.test(e));
   // The corrected words should steer the similarity paths too, not only the ask as typed.
-  const embedding = searchChanged ? embedText([askText(ask), after.restatement, ...services.map((s) => s.name), ...skills.map((s) => s.name)].join("\n")) : undefined;
+  const embedding = searchChanged ? embedText([askText(ask), extrasSearchText(after), after.restatement, ...services.map((s) => s.name), ...skills.map((s) => s.name)].filter(Boolean).join("\n")) : undefined;
   if (searchChanged) log.branch(`${askId} re-embed the ask`, "services, skills or the restatement changed", { askId });
 
   const docs = await q("ask.confirm.docs", (db) => db.select({ documentId: t.askDocChecks.documentId, title: t.documents.title }).from(t.askDocChecks).innerJoin(t.documents, eq(t.documents.id, t.askDocChecks.documentId)).where(eq(t.askDocChecks.askId, askId)));

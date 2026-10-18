@@ -190,7 +190,8 @@ export function withAction<I, O>(name: string, fn: (input: I) => Promise<O>) {
 }
 
 function summarizeInput(input: unknown): unknown {
-  const s = JSON.stringify(input ?? null);
+  // A screenshot's bytes are never logged, only their size (the hash is logged once it is checked).
+  const s = JSON.stringify(input ?? null, (k, v) => (k === "dataBase64" && typeof v === "string" ? `[image, ${v.length} base64 chars]` : v));
   return s.length > 500 ? `${s.slice(0, 500)}... (${s.length} chars)` : input;
 }
 

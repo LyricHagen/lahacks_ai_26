@@ -1,0 +1,23 @@
+{
+  "note": "Demo results for read_screenshot (step-5-preview reading a screenshot attached to an ask). Demo mode can only read the committed sample screenshot(s) below, matched by sha256 of the exact bytes; any other image is reported as not read. The sample is public/samples/billing-webhook-error.png.",
+  "samples": [
+    {
+      "sha256": "ba24e82981234fc74d85ab3bcc39875c472e50072c0d92c3cb423126def6e593",
+      "label": "billing-service Stripe webhook signature error and a duplicate charge (kubectl logs)",
+      "output": {
+        "restatement": "You are seeing billing-service reject Stripe webhooks with a signature error right after the webhook secret was rotated, and a shipper was charged twice for the same invoice on the retry.",
+        "serviceIds": ["svc_billing", "svc_secrets"],
+        "skillIds": ["skl_stripe_api", "skl_payments", "skl_secrets"],
+        "artifacts": [
+          { "kind": "error", "text": "StripeSignatureVerificationError: No signatures found matching the expected signature for payload" },
+          { "kind": "error", "text": "POST /webhooks/stripe 400 Bad Request" },
+          { "kind": "error", "text": "DuplicateChargeSuspected: shipper acct_7719 charged twice for invoice INV-20871" },
+          { "kind": "repo", "text": "ferndale/billing-service" }
+        ],
+        "helpKind": "unblock",
+        "urgency": null,
+        "sensitive": [{ "text": "whsec_Tz81Lq0aVv3kP9", "why": "credential (Stripe webhook signing secret)" }]
+      }
+    }
+  ]
+}

@@ -6,11 +6,11 @@
 
 import { useRouter } from "next/navigation";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { backToShortlist, copyDraft, markSent, saveDraft } from "@/app/ask/actions";
+import { backToShortlist, copyDraft, deliverDraft, markSent, saveDraft } from "@/app/ask/actions";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
-import { ApiError, runAction } from "@/lib/api-client";
+import { ApiError, apiFetch, runAction } from "@/lib/api-client";
 import { createLogger } from "@/lib/client-log";
 import { copyText, type DraftFormat, type DraftText, type DraftVariant, DRAFT_FORMATS, DRAFT_VARIANTS, FORMAT_APP, FORMAT_LABEL, VARIANT_DEF, WORD_LIMIT, wordCount } from "@/lib/draft";
 import { MessageMock } from "./message-mock";
@@ -33,6 +33,8 @@ export type DraftClientData = {
   texts: Record<DraftVariant, DraftText>;
   originals: Record<DraftVariant, DraftText>;
   format: DraftFormat;
+  /** FEATURE_PHOTON, for the ask's signed-in owner only; null hides the phone option. */
+  phone: { linked: boolean; handle: string | null; lastDelivery: { status: string; at: string } | null } | null;
 };
 
 type Ctx = {
@@ -174,6 +176,7 @@ export function DraftWorkspace({ variant }: { variant: DraftVariant }) {
   const [copied, setCopied] = useState(false);
   const [confirmSend, setConfirmSend] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [texting, setTexting] = useState<"idle" | "sending" | "waiting" | "done">(data.phone?.lastDelivery?.status === "accepted" ? "waiting" : "idle");
   const over = words > WORD_LIMIT;
   const loggedOver = useRef(false);
 
@@ -194,6 +197,45 @@ export function DraftWorkspace({ variant }: { variant: DraftVariant }) {
     } catch (err) {
       log.error(`${data.askId} clipboard write failed`, { err });
       toast.show({ kind: "error", title: "Could not copy", body: "Your browser blocked the clipboard. Select the text and copy it by hand.", code: "CLIENT_CLIPBOARD" });
+    }
+  }
+
+  // After texting the draft: poll the inbound sync until the SENT reply moves the ask (5 minutes at most).
+  useEffect(() => {
+    if (texting !== "waiting" || data.readOnly) return;
+    const started = performance.now();
+    const id = setInterval(async () => {
+      if (performance.now() - started > 5 * 60 * 1000) {
+        log.info(`${data.askId} stopped waiting for a SENT text after 5 minutes`, { askId: data.askId });
+        setTexting("idle");
+        return;
+      }
+      try {
+        const r = await apiFetch<{ outcomes: Record<string, number> }>("/api/photon/sync", { method: "POST" });
+        if (r.outcomes.sent_confirmed) {
+          log.info(`${data.askId} a SENT text was handled, opening the ask`, { askId: data.askId });
+          setTexting("done");
+          router.push(`/ask/${data.askId}`);
+        }
+      } catch (err) {
+        log.warn(`${data.askId} inbound sync failed while waiting for SENT (will try again)`, { err, askId: data.askId });
+      }
+    }, 4000);
+    return () => clearInterval(id);
+  }, [texting, data.readOnly, data.askId, router]);
+
+  async function textIt() {
+    setTexting("sending");
+    try {
+      const r = await runAction("phone.deliver", deliverDraft, { askId: data.askId, variant, format, subject: text.subject, body: text.body });
+      log.info(`${data.askId} texted ${variant} as ${format} to ${r.to} (delivery ${r.deliveryId})`, { askId: data.askId });
+      toast.show({ kind: "success", title: `Texted to ${r.to}`, body: "Send it from your own app, then reply SENT to that text." });
+      setTexting("waiting");
+    } catch (err) {
+      const e = err instanceof ApiError ? err : null;
+      log.error(`${data.askId} texting the draft failed`, { err, code: e?.code });
+      toast.show({ kind: "error", title: "Could not text the draft", body: e?.message ?? String(err), code: e?.code ?? "UNKNOWN" });
+      setTexting("idle");
     }
   }
 
@@ -273,6 +315,24 @@ export function DraftWorkspace({ variant }: { variant: DraftVariant }) {
             </Button>
             <span className="text-[13px] text-muted">{copied ? "On your clipboard, exactly as shown above." : "Copies exactly what is shown above."}</span>
           </div>
+          {data.phone && !data.readOnly ? (
+            <div className="col-start-2 mt-2 flex flex-wrap items-center gap-3">
+              {data.phone.linked ? (
+                <>
+                  <Button onClick={textIt} disabled={texting === "sending"}>
+                    {texting === "sending" ? "Texting..." : texting === "waiting" ? "Text it again" : "Text it to my phone"}
+                  </Button>
+                  <span className="text-[13px] text-muted">
+                    {texting === "waiting" ? `Texted to ${data.phone.handle}. Send it from your own app, then reply SENT; this page is watching for it.` : `Or get it on ${data.phone.handle} and send it from your real messaging app.`}
+                  </span>
+                </>
+              ) : (
+                <span className="text-[13px] text-muted">
+                  Want it on your phone instead? <a href="/account#phone">Link your number</a> first.
+                </span>
+              )}
+            </div>
+          ) : null}
         </li>
         <li className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2">
           <span className="font-mono text-[13px] text-muted">2</span>

@@ -30,6 +30,13 @@ export const RATE_LIMITS = {
   demo_reset: { limit: 60, windowS: 60 * 60 },
   /** Entering the demo signs in to the shared demo account. */
   demo_enter: { limit: 120, windowS: 60 * 60 },
+  /** Photon (FEATURE_PHOTON): link codes and drafts texted to one's own phone, per account. */
+  phone_link: { limit: 10, windowS: 60 * 60 },
+  phone_deliver: { limit: 30, windowS: 60 * 60 },
+  /** POST /api/photon/sync from pages waiting on a text (every 4s while open) and the listener. */
+  photon_sync: { limit: 2000, windowS: 60 * 60 },
+  /** The ASI:One agent's calls into /api/agent/* (FEATURE_FETCH_AGENT), per ASI:One sender. */
+  agent_sender: { limit: 300, windowS: 60 * 60 },
 } as const;
 
 export type RateBucket = keyof typeof RATE_LIMITS;
