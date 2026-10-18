@@ -92,10 +92,10 @@ All of them go through `callModel` (`src/lib/model.ts`): same 6 gate checks, usa
 
 ### CREAO: `FEATURE_CREAO_GLOSSARY`
 
-- **Agent id:** _fill in from agent.creao.ai_ &nbsp; **Run share link:** _fill in_
+- **Agent id:** `c13d8f28-eb53-43bf-848a-8fc7da1d4076` &nbsp; **Run share link:** https://agent.creao.ai/share/d6065d49bcd4e649a6ef52a633431e5a
 - The glossary agent (`agents/creao/glossary-agent.md`) reads the ask against Ferndale's jargon table (`src/lib/glossary.ts`: "the till" means billing-service, "Paperboy" means invoice-worker, "WH secret", "DLQ", ...). It runs before retrieval. Its hits add services and skills to the understanding and their meanings to the search text. The agent may only answer with glossary ids, and each phrase must appear in the ask.
 - Why it is core: "The till double charged a shipper after the WH secret rotated" names no service, and the text reader finds none. The glossary supplies billing-service, vault-config and the Stripe skills, and that is what makes the right owners show up. Without the agent, jargon-only asks route by wording alone.
-- Live: CREAO API Trigger (`src/lib/model-creao.ts`), run then poll, 30s timeout. Demo: exact whole-word matches in our code.
+- Live: CREAO API Trigger (`src/lib/model-creao.ts`), run then poll (the answer is read from the run's JSON artifact), 45s timeout. Demo: exact whole-word matches in our code.
 
 ### Photon: `FEATURE_PHOTON`
 

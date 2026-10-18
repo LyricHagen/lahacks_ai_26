@@ -6,7 +6,7 @@ import "server-only";
 //   CREAO_API_KEY        capi_... key from the agent's page on agent.creao.ai
 //   CREAO_APP_ID         the agent's app id (the {appId} in its API Trigger URL)
 //   CREAO_API_URL        default https://agent.creao.ai/api/v1
-//   CREAO_TIMEOUT_MS     whole run, start to result, default 30000
+//   CREAO_TIMEOUT_MS     whole run, start to result, default 45000 (a run took 30s in testing)
 //
 // A run is asynchronous: POST .../runs answers {id, status: pending}; we poll GET .../runs/{id}
 // every CREAO_POLL_MS (default 1000) until completed, failed or cancelled. The start is retried
@@ -18,7 +18,7 @@ import { createLogger } from "./log";
 
 const log = createLogger("model.creao");
 
-export const CREAO_DEFAULTS = { url: "https://agent.creao.ai/api/v1", timeoutMs: 30_000, pollMs: 1000 };
+export const CREAO_DEFAULTS = { url: "https://agent.creao.ai/api/v1", timeoutMs: 45_000, pollMs: 1000 };
 /** The name the usage log and MODEL_PRICES know the agent by. */
 export const CREAO_MODEL = "creao-glossary-agent";
 
@@ -36,6 +36,28 @@ type RunBody = {
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** The first application/json artifact of a finished run, as text, or "" when there is none or it cannot be read. */
+async function readJsonArtifact(runId: string, artifacts: unknown[] | undefined, timeoutMs: number): Promise<string> {
+  const a = (artifacts ?? []).find((x): x is { url: string; title?: string } => typeof x === "object" && x !== null && (x as { type?: string }).type === "application/json" && typeof (x as { url?: unknown }).url === "string");
+  if (!a) {
+    log.skip(`creao run ${runId} artifact`, "no JSON artifact, using the run text");
+    return "";
+  }
+  try {
+    const res = await fetch(a.url, { headers: { authorization: `Bearer ${process.env.CREAO_API_KEY}` }, signal: AbortSignal.timeout(Math.max(1000, timeoutMs)) });
+    const text = await res.text();
+    if (!res.ok) {
+      log.warn(`creao run ${runId} artifact "${a.title ?? "?"}" answered ${res.status}, using the run text: ${text.slice(0, 200)}`);
+      return "";
+    }
+    log.info(`creao run ${runId} read artifact "${a.title ?? "?"}" (${text.length} chars)`);
+    return text;
+  } catch (err) {
+    log.warn(`creao run ${runId} artifact download failed, using the run text: ${(err as Error).message}`, { err });
+    return "";
+  }
+}
 
 async function call(method: "GET" | "POST", path: string, body: unknown, timeoutMs: number): Promise<{ status: number; json: RunBody; text: string }> {
   const res = await fetch(`${process.env.CREAO_API_URL || CREAO_DEFAULTS.url}${path}`, {
@@ -104,7 +126,9 @@ export async function creaoRun(args: { inputs: Record<string, string>; timeoutMs
       if (status !== lastStatus) log.info(`creao run ${runId} status ${lastStatus} -> ${status} after ${Math.round(performance.now() - t0)}ms (poll ${polls})`);
       lastStatus = status;
       if (status === "completed") {
-        const text = r.json.result?.text || r.json.result?.chatText || "";
+        // The agent writes its answer to a JSON artifact; result.text is then only a summary of it.
+        const artifactText = await readJsonArtifact(runId, r.json.result?.artifacts, Math.min(10_000, left()));
+        const text = artifactText || r.json.result?.text || r.json.result?.chatText || "";
         const credits = typeof r.json.usage?.credits === "number" ? r.json.usage.credits : null;
         log.info(`creao run ${runId} completed in ${Math.round(performance.now() - t0)}ms after ${polls} polls: ${text.length} chars of text, ${r.json.result?.artifacts?.length ?? 0} artifacts, credits ${credits ?? "not reported"}`);
         if (!text) throw new AppError("MODEL_CALL_FAILED", `creao run ${runId} completed with no text`);

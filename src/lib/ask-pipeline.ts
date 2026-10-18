@@ -91,6 +91,8 @@ export async function runAskPipeline(askId: string, opts: { paceMs?: number } = 
     const wait = lastLineAt ? pace - (wallMs() - lastLineAt) : 0;
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     await setProgress(null, askId, line);
+    // Each line renews the lease, so a step with several slow provider calls (CREAO, then StepFun) outlives LEASE_S.
+    await q("ask.pipeline.renew", (db) => db.update(t.asks).set({ runLeaseUntil: sql`now() + make_interval(secs => ${LEASE_S})` }).where(eq(t.asks.id, askId)));
     lastLineAt = wallMs();
   };
   log.info(`${askId} pipeline start`, { askId, paceMs: pace });

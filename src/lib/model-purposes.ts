@@ -649,7 +649,7 @@ const resolveJargon: PurposeSpec<JargonInput, JargonResult> = {
     system: "see agents/creao/glossary-agent.md",
     prompt: i.text,
     maxTokens: 0,
-    timeoutMs: Number(process.env.CREAO_TIMEOUT_MS) > 0 ? Number(process.env.CREAO_TIMEOUT_MS) : 30_000,
+    timeoutMs: Number(process.env.CREAO_TIMEOUT_MS) > 0 ? Number(process.env.CREAO_TIMEOUT_MS) : 45_000,
     creaoInputs: {
       ask: i.text,
       glossary: JSON.stringify(GLOSSARY.map((g) => ({ id: g.id, term: g.term, aliases: g.aliases, means: g.means }))),
